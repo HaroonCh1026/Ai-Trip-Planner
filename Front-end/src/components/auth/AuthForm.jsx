@@ -1,6 +1,14 @@
+// src/components/auth/AuthForm.jsx
+import { useNavigate } from "react-router-dom";
 import { C } from "../../styles/colors";
 
 export default function AuthForm({ mode, form, setForm, error, loading, onSubmit, onToggle }) {
+  const navigate = useNavigate();
+
+  const handleForgotPassword = () => {
+    navigate("/forgot-password");
+  };
+
   return (
     <>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -111,7 +119,7 @@ export default function AuthForm({ mode, form, setForm, error, loading, onSubmit
             onChange={(e) =>
               setForm((f) => ({ ...f, password: e.target.value }))
             }
-            placeholder="Minimum 6 characters"
+            placeholder="Minimum 8 characters"
             onKeyDown={(e) => e.key === "Enter" && onSubmit()}
           />
         </div>
@@ -179,6 +187,7 @@ export default function AuthForm({ mode, form, setForm, error, loading, onSubmit
         )}
       </button>
 
+      {/* Forgot Password Link - Updated to use navigate */}
       {mode === "login" && (
         <p
           style={{
@@ -188,6 +197,7 @@ export default function AuthForm({ mode, form, setForm, error, loading, onSubmit
             color: C.midGray,
             cursor: "pointer",
           }}
+          onClick={handleForgotPassword}
           onMouseEnter={(e) => (e.target.style.color = C.crimson)}
           onMouseLeave={(e) => (e.target.style.color = C.midGray)}
         >

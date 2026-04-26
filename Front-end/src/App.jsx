@@ -1,3 +1,4 @@
+// src/App.jsx
 import { useState, useEffect } from "react";
 import {
   BrowserRouter,
@@ -23,6 +24,8 @@ import ItineraryView from "./pages/ItineraryView";
 import SupportPage from "./pages/SupportPage";
 import AdminPanel from "./admin/AdminPanel";
 import BlogDetailPage from "./pages/BlogDetailPage";
+import ForgotPasswordPage from "./components/auth/ForgotPasswordPage";  // NEW
+import ResetPasswordPage from "./components/auth/ResetPasswordPage";    // NEW
 
 function RequireAuth({ user, children }) {
   const location = useLocation();
@@ -37,12 +40,8 @@ function RequireAdmin({ user, children }) {
 }
 
 // ── Wrapper for /itinerary/:id ──
-// Reads id from URL, renders ItineraryView which fetches the trip by id.
-// This route survives refresh because we pass the id via URL, not state.
 function ItineraryRoute({ activeTrip, onBack, onTripStatusUpdate }) {
   const { id } = useParams();
-  // Prefer the in-memory trip if it matches the URL id (no refetch needed).
-  // Otherwise pass a stub with _id and let ItineraryView fetch by id.
   const tripForView =
     activeTrip && activeTrip._id === id ? activeTrip : { _id: id };
   return (
@@ -128,9 +127,6 @@ function AppInner() {
       return;
     }
     if (authToken) {
-      // OAuth callback — token comes via URL, fetch user via /auth/me.
-      // (We used to receive the user JSON in the URL too, but that 431'd Vite
-      // once the avatar field grew large.)
       localStorage.setItem("token", authToken);
       api
         .get("/auth/me")
@@ -154,11 +150,9 @@ function AppInner() {
       return;
     }
 
-    // ── Restore session from localStorage, then verify token ──
     const stored = localStorage.getItem("user");
     const token = localStorage.getItem("token");
     if (stored && token) {
-      // Optimistically restore so UI doesn't flicker
       const u = JSON.parse(stored);
       setUser(u);
       if (!u.isAdmin)
@@ -167,9 +161,6 @@ function AppInner() {
           .then(setTrips)
           .catch(() => setTrips([]));
 
-      // Verify token is still valid. If it's expired or revoked,
-      // the axios interceptor (client.js) will clear and redirect on 401.
-      // On success, sync any fresh user fields from the server.
       api
         .get("/auth/me")
         .then(({ data }) => {
@@ -179,14 +170,12 @@ function AppInner() {
             localStorage.setItem("user", JSON.stringify(fresh));
           }
         })
-        .catch(() => {
-          // non-401 errors: keep optimistic state
-        })
+        .catch(() => {})
         .finally(() => setBootstrapped(true));
       return;
     }
     setBootstrapped(true);
-  }, []); // eslint-disable-line
+  }, []);
 
   const _doLogin = (userData, doNav = true) => {
     setUser(userData);
@@ -230,7 +219,6 @@ function AppInner() {
     });
     setTrips((p) => [t, ...p]);
     setActiveTrip(t);
-    // id-based URL so refresh survives
     navigate(`/itinerary/${t._id}`);
   };
 
@@ -271,6 +259,22 @@ function AppInner() {
           <Route
             path="/blog/:id"
             element={<BlogDetailPage onBack={() => navigate(-1)} />}
+          />
+
+          {/* NEW: Forgot Password Route */}
+          <Route
+            path="/forgot-password"
+            element={
+              <ForgotPasswordPage onBack={() => navigate("/login")} />
+            }
+          />
+
+          {/* NEW: Reset Password Route */}
+          <Route
+            path="/reset-password/:token"
+            element={
+              <ResetPasswordPage onBack={() => navigate("/login")} />
+            }
           />
 
           <Route
@@ -336,7 +340,6 @@ function AppInner() {
             }
           />
 
-          {/* New id-based route — survives refresh */}
           <Route
             path="/itinerary/:id"
             element={
@@ -352,8 +355,6 @@ function AppInner() {
             }
           />
 
-          {/* Legacy /itinerary — if activeTrip is in memory, redirect to its id url.
-              Otherwise bounce to dashboard. Kept for back-compat. */}
           <Route
             path="/itinerary"
             element={
@@ -393,7 +394,6 @@ function AppInner() {
             }
           />
 
-          {/* Proper 404 instead of silent redirect to / */}
           <Route path="*" element={<NotFoundPage user={user} />} />
         </Routes>
       </div>

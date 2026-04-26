@@ -120,3 +120,25 @@ export const updateTicketSchema = Joi.object({
   status:     Joi.string().valid('Open', 'In Progress', 'Closed'),
   adminReply: Joi.string().max(2000).allow(''),
 });
+
+// Backend/src/utils/validators.ts
+// Add these after your existing schemas:
+
+// ─── Password Reset (Round 6) ──────────────────────────────────────────────
+export const forgotPasswordSchema = Joi.object({
+  email: Joi.string().email().required().messages({
+    'string.email': 'Please enter a valid email address',
+    'any.required': 'Email is required',
+  }),
+});
+
+export const resetPasswordSchema = Joi.object({
+  token: Joi.string().min(32).required().messages({
+    'string.min': 'Invalid reset token',
+    'any.required': 'Reset token is required',
+  }),
+  password: Joi.string().min(8).required().messages({
+    'string.min': 'Password must be at least 8 characters',
+    'any.required': 'New password is required',
+  }),
+});

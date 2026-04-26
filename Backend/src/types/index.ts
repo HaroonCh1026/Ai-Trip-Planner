@@ -18,6 +18,12 @@ export interface IUser extends Document {
   failedLoginAttempts: number;
   lockedUntil: Date | null;
   createdAt: Date;
+  
+  // ─── ADD THESE TWO LINES FOR PASSWORD RESET ──────────────────────────────
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
+  // ────────────────────────────────────────────────────────────────────────
+  
   comparePassword(candidate: string): Promise<boolean>;
 }
 

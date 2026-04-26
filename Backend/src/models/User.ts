@@ -1,3 +1,4 @@
+// Backend/src/models/User.ts
 import mongoose, { Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { IUser } from '../types';
@@ -27,9 +28,8 @@ const userSchema = new Schema<IUser>(
     phone:   { type: String, default: '' },
     city:    { type: String, default: '' },
     bio:     { type: String, default: '' },
-    avatar:  { type: String, default: '' },   // profile image URL / base64
+    avatar:  { type: String, default: '' },
 
-    // ── Auth provider: Facebook removed ───────────────────────────────────
     provider: {
       type: String,
       enum: ['email', 'Google', 'Apple'],
@@ -53,14 +53,19 @@ const userSchema = new Schema<IUser>(
     },
     tripsUsed: { type: Number, default: 0 },
 
-    // ── Brute-force protection (SRS §3.2.1) ──────────────────────────────
-    // Tracks consecutive failed email/password login attempts. Resets to 0
-    // on a successful login. Once it hits FAILED_LOGIN_THRESHOLD, lockedUntil
-    // is set and the counter is reset.
+    // ─── Brute-force protection ──────────────────────────────────────────
     failedLoginAttempts: { type: Number, default: 0, select: false },
-    // When this is in the future, login is rejected without checking password.
-    // Cleared automatically on successful login.
     lockedUntil:         { type: Date,   default: null, select: false },
+
+    // ─── Password Reset (NEW - Round 6) ────────────────────────────────────
+    resetPasswordToken: {
+      type: String,
+      select: false, // Don't return by default for security
+    },
+    resetPasswordExpires: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,
@@ -68,6 +73,10 @@ const userSchema = new Schema<IUser>(
       transform: (_doc, ret: Record<string, unknown>) => {
         delete ret['password'];
         delete ret['__v'];
+        delete ret['resetPasswordToken'];
+        delete ret['resetPasswordExpires'];
+        delete ret['failedLoginAttempts'];
+        delete ret['lockedUntil'];
         return ret;
       },
     },

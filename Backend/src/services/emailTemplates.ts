@@ -1,234 +1,210 @@
-import { sendEmail, wrapEmailHtml } from './email.service';
+// Backend/src/services/emailTemplates.ts
+import { wrapEmailHtml, sendEmail } from './email.service';
 import config from '../config/config';
 
-// ─── Email templates ────────────────────────────────────────────────────────
-// Each template returns a fire-and-forget promise. Callers should NOT await
-// the result inside a request handler — emails are best-effort and slow
-// network calls to Resend should never delay an API response.
-//
-// Convention: every template function logs internally on failure and never
-// throws. Use them like:
-//
-//   sendWelcomeEmail(user).catch(() => undefined);
-//
-// or simply ignore the return value.
-
-// ─── Small HTML helpers ─────────────────────────────────────────────────────
-const button = (label: string, href: string) => `
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
-    <tr>
-      <td style="background:#8c3232; border-radius:6px;">
-        <a href="${href}" style="display:inline-block; padding:12px 24px; color:#fff; text-decoration:none; font-size:14px; font-weight:600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-          ${label}
-        </a>
-      </td>
-    </tr>
-  </table>`;
-
-const heading = (text: string) => `
-  <h1 style="font-family: Georgia, 'Times New Roman', serif; font-size:24px; font-weight:700; color:#e8e8e8; margin:0 0 16px;">
-    ${text}
-  </h1>`;
-
-const paragraph = (html: string) => `
-  <p style="font-size:14px; line-height:1.7; color:#c8c8c8; margin:0 0 16px;">${html}</p>`;
-
-const quoteBlock = (text: string) => `
-  <div style="margin:20px 0; padding:16px 20px; background:#0d0d0d; border-left:3px solid #8c3232; border-radius:4px;">
-    <div style="font-size:13px; line-height:1.7; color:#c8c8c8; white-space:pre-wrap;">${escapeHtml(text)}</div>
-  </div>`;
-
-// Minimal HTML escaper — important since we're injecting user-supplied content
-// (ticket message bodies, user names) directly into the HTML email.
-function escapeHtml(s: string): string {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-// Truncate long bodies in email previews so we don't ship 5KB threads.
-function preview(s: string, max = 400): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max) + '…';
-}
-
-// ─── Templates ──────────────────────────────────────────────────────────────
-
-interface WelcomeUser {
-  name: string;
-  email: string;
-}
-
-/**
- * Welcome email sent to a user immediately after registration.
- */
-export const sendWelcomeEmail = async (user: WelcomeUser): Promise<boolean> => {
-  const safeName = escapeHtml(user.name);
-  const dashboardUrl = `${config.frontendUrl}/dashboard`;
-
-  const bodyHtml = `
-    ${heading(`Welcome, ${safeName}.`)}
-    ${paragraph(`Your VoyageurAI account is ready. We're glad to have you.`)}
-    ${paragraph(`You have <strong>${config.freeTripLimit} free AI-generated itineraries</strong> to start with. Your first trip is just a few questions away — pick a destination, set your dates and budget, and our AI will draft a complete day-by-day plan tailored to your preferences.`)}
-    ${button('Plan Your First Trip', dashboardUrl)}
-    ${paragraph(`Need help? Just reply to this email or visit our <a href="${config.frontendUrl}/support" style="color:#8c3232; text-decoration:none; border-bottom:1px solid rgba(140,50,50,0.4);">support page</a>.`)}
-    ${paragraph(`Safe travels,<br/>The VoyageurAI Team`)}
+// ─── Welcome Email ─────────────────────────────────────────────────────────
+export const welcomeEmailHtml = (name: string): string => {
+  const body = `
+    <h2 style="margin:0 0 16px; font-size:24px;">Welcome to VoyageurAI, ${name}! 🎉</h2>
+    <p style="margin:0 0 16px; line-height:1.6;">We're thrilled to have you on board. Your AI-powered travel planning journey starts now.</p>
+    <p style="margin:0 0 12px; font-weight:600;">With VoyageurAI, you can:</p>
+    <ul style="margin:0 0 20px; padding-left:20px; line-height:1.6;">
+      <li>✨ Generate personalized itineraries</li>
+      <li>🌍 Discover hidden gems and local favorites</li>
+      <li>💰 Get budget-optimized travel plans</li>
+      <li>💬 Chat with our AI to refine your trips</li>
+    </ul>
+    <div style="text-align:center; margin:28px 0 20px;">
+      <a href="${config.frontendUrl}/dashboard" style="display:inline-block; background:#8c3232; color:white; padding:12px 28px; border-radius:6px; text-decoration:none; font-weight:600;">Plan Your First Trip →</a>
+    </div>
+    <p style="margin:20px 0 0; line-height:1.6;">Questions? Reply to this email — we're here to help!</p>
+    <p style="margin:20px 0 0; line-height:1.6;">Safe travels,<br><strong>The VoyageurAI Team</strong></p>
   `;
+  
+  return wrapEmailHtml({ bodyHtml: body, preheader: 'Welcome to VoyageurAI - Start planning your next adventure!' });
+};
 
-  const text = `Welcome, ${user.name}.
-
-Your VoyageurAI account is ready. You have ${config.freeTripLimit} free AI-generated itineraries to start with.
-
-Plan your first trip: ${dashboardUrl}
-
-Need help? Reply to this email or visit ${config.frontendUrl}/support.
-
-Safe travels,
-The VoyageurAI Team`;
-
+export const sendWelcomeEmail = async (user: { name: string; email: string }): Promise<boolean> => {
+  const html = welcomeEmailHtml(user.name);
+  const text = `Welcome to VoyageurAI, ${user.name}! Start planning your AI-powered travel adventures today.`;
+  
   return sendEmail({
     to: user.email,
     subject: 'Welcome to VoyageurAI',
     text,
-    html: wrapEmailHtml({
-      preheader: `Your account is ready — ${config.freeTripLimit} free itineraries waiting.`,
-      bodyHtml,
-    }),
+    html,
   });
 };
 
-interface TicketRef {
-  _id: { toString(): string } | string;
+// ─── New Ticket Admin Email ────────────────────────────────────────────────
+export const newTicketAdminEmailHtml = (ticketData: {
+  ticketId: string;
   name: string;
   email: string;
   category: string;
   message: string;
-}
-
-/**
- * Notify admin that a new support ticket has been created.
- *
- * Sent to config.adminEmail. The reply-to header is set to the user's email
- * so the admin can reply directly from their email client (in production —
- * in test mode the reply still goes to the user but Resend just won't deliver
- * it until the domain is verified).
- */
-export const sendNewTicketAdminEmail = async (ticket: TicketRef): Promise<boolean> => {
-  const id = typeof ticket._id === 'string' ? ticket._id : ticket._id.toString();
-  const adminTicketUrl = `${config.frontendUrl}/admin/support?ticketId=${id}`;
-
-  const bodyHtml = `
-    ${heading('New Support Ticket')}
-    ${paragraph(`A user just submitted a new support ticket.`)}
-    <table cellpadding="0" cellspacing="0" border="0" style="width:100%; margin:16px 0;">
-      <tr><td style="padding:6px 0; font-size:13px; color:#888;">From:</td><td style="padding:6px 0; font-size:13px; color:#e8e8e8;">${escapeHtml(ticket.name)} &lt;${escapeHtml(ticket.email)}&gt;</td></tr>
-      <tr><td style="padding:6px 0; font-size:13px; color:#888;">Category:</td><td style="padding:6px 0; font-size:13px; color:#e8e8e8;">${escapeHtml(ticket.category)}</td></tr>
-      <tr><td style="padding:6px 0; font-size:13px; color:#888;">Ticket ID:</td><td style="padding:6px 0; font-size:13px; color:#e8e8e8; font-family:monospace;">${escapeHtml(id)}</td></tr>
-    </table>
-    ${quoteBlock(preview(ticket.message))}
-    ${button('Open in Admin Panel', adminTicketUrl)}
+}): string => {
+  const body = `
+    <h2 style="margin:0 0 16px;">📬 New Support Ticket</h2>
+    <p style="margin:0 0 12px;"><strong>Ticket ID:</strong> ${ticketData.ticketId}</p>
+    <p style="margin:0 0 12px;"><strong>From:</strong> ${ticketData.name} (${ticketData.email})</p>
+    <p style="margin:0 0 20px;"><strong>Category:</strong> ${ticketData.category}</p>
+    <hr style="border-color:rgba(255,255,255,0.1); margin:20px 0;">
+    <h3 style="margin:0 0 12px;">Message:</h3>
+    <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:6px; margin-bottom:24px;">
+      ${ticketData.message.replace(/\n/g, '<br>')}
+    </div>
+    <div style="text-align:center;">
+      <a href="${config.frontendUrl}/admin/support?ticket=${ticketData.ticketId}" style="display:inline-block; background:#8c3232; color:white; padding:10px 24px; border-radius:6px; text-decoration:none;">Open in Admin Panel →</a>
+    </div>
   `;
+  
+  return wrapEmailHtml({ bodyHtml: body, preheader: `New support ticket: ${ticketData.category}` });
+};
 
-  const text = `New Support Ticket
-
-From: ${ticket.name} <${ticket.email}>
-Category: ${ticket.category}
-Ticket ID: ${id}
-
-${preview(ticket.message)}
-
-Open in admin panel: ${adminTicketUrl}`;
-
+// FIXED: Expects ticket object with _id, name, email, category, message
+export const sendNewTicketAdminEmail = async (ticket: {
+  _id: any;
+  name: string;
+  email: string;
+  category: string;
+  message: string;
+}): Promise<boolean> => {
+  const ticketId = ticket._id.toString();
+  const html = newTicketAdminEmailHtml({
+    ticketId,
+    name: ticket.name,
+    email: ticket.email,
+    category: ticket.category,
+    message: ticket.message,
+  });
+  const text = `New support ticket #${ticketId} from ${ticket.name}\n\nMessage: ${ticket.message}`;
+  
   return sendEmail({
     to: config.adminEmail,
-    replyTo: ticket.email, // admin can reply directly to user
     subject: `[Ticket] New: ${ticket.category} from ${ticket.name}`,
     text,
-    html: wrapEmailHtml({
-      preheader: `${ticket.name} — ${preview(ticket.message, 80)}`,
-      bodyHtml,
-    }),
+    html,
   });
 };
 
-/**
- * Notify admin that a user has added a message to an existing ticket.
- */
-export const sendUserReplyAdminEmail = async (
-  ticket: TicketRef,
-  messageText: string
-): Promise<boolean> => {
-  const id = typeof ticket._id === 'string' ? ticket._id : ticket._id.toString();
-  const adminTicketUrl = `${config.frontendUrl}/admin/support?ticketId=${id}`;
-
-  const bodyHtml = `
-    ${heading('User Reply on Ticket')}
-    ${paragraph(`<strong>${escapeHtml(ticket.name)}</strong> just added a new message to their open ticket.`)}
-    ${quoteBlock(preview(messageText))}
-    ${button('Reply in Admin Panel', adminTicketUrl)}
-    ${paragraph(`<small style="color:#888;">Ticket ID: <code style="font-family:monospace;">${escapeHtml(id)}</code></small>`)}
+// ─── User Reply Admin Email ────────────────────────────────────────────────
+export const userReplyAdminEmailHtml = (ticketData: {
+  ticketId: string;
+  name: string;
+  message: string;
+}): string => {
+  const body = `
+    <h2 style="margin:0 0 16px;">💬 User Reply on Ticket #${ticketData.ticketId}</h2>
+    <p style="margin:0 0 20px;"><strong>${ticketData.name}</strong> replied to their ticket.</p>
+    <hr style="border-color:rgba(255,255,255,0.1); margin:20px 0;">
+    <h3 style="margin:0 0 12px;">Reply:</h3>
+    <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:6px; margin-bottom:24px;">
+      ${ticketData.message.replace(/\n/g, '<br>')}
+    </div>
+    <div style="text-align:center;">
+      <a href="${config.frontendUrl}/admin/support?ticket=${ticketData.ticketId}" style="display:inline-block; background:#8c3232; color:white; padding:10px 24px; border-radius:6px; text-decoration:none;">View Ticket →</a>
+    </div>
   `;
+  
+  return wrapEmailHtml({ bodyHtml: body, preheader: `User replied to ticket #${ticketData.ticketId}` });
+};
 
-  const text = `User Reply on Ticket
-
-${ticket.name} just added a new message to their open ticket.
-
-"${preview(messageText)}"
-
-Reply in admin panel: ${adminTicketUrl}
-Ticket ID: ${id}`;
-
+// FIXED: Expects ticket object AND reply message text
+export const sendUserReplyAdminEmail = async (ticket: {
+  _id: any;
+  name: string;
+  email: string;
+  category: string;
+  message: string;
+}, replyText: string): Promise<boolean> => {
+  const ticketId = ticket._id.toString();
+  const html = userReplyAdminEmailHtml({
+    ticketId,
+    name: ticket.name,
+    message: replyText,
+  });
+  const text = `User ${ticket.name} replied to ticket #${ticketId}\n\nReply: ${replyText}`;
+  
   return sendEmail({
     to: config.adminEmail,
-    replyTo: ticket.email,
     subject: `[Ticket] Reply from ${ticket.name}`,
     text,
-    html: wrapEmailHtml({
-      preheader: preview(messageText, 100),
-      bodyHtml,
-    }),
+    html,
   });
 };
 
-/**
- * Notify the user that an admin has replied to their ticket.
- *
- * In Resend test mode this will only deliver if the user's email matches the
- * registered Resend account. Once a domain is verified, it works for all users.
- */
-export const sendAdminReplyUserEmail = async (
-  ticket: TicketRef,
-  messageText: string
-): Promise<boolean> => {
-  const id = typeof ticket._id === 'string' ? ticket._id : ticket._id.toString();
-  const userTicketUrl = `${config.frontendUrl}/support?ticketId=${id}`;
-
-  const bodyHtml = `
-    ${heading('We replied to your ticket')}
-    ${paragraph(`Hi ${escapeHtml(ticket.name)}, our support team has replied to your ticket.`)}
-    ${quoteBlock(preview(messageText))}
-    ${button('View Full Conversation', userTicketUrl)}
-    ${paragraph(`You can reply to this thread directly in the support page on VoyageurAI.`)}
+// ─── Admin Reply User Email ────────────────────────────────────────────────
+export const adminReplyUserEmailHtml = (ticketData: {
+  ticketId: string;
+  message: string;
+}): string => {
+  const body = `
+    <h2 style="margin:0 0 16px;">📨 Admin Response to Your Ticket</h2>
+    <p style="margin:0 0 12px;"><strong>Ticket #${ticketData.ticketId}</strong> has a new reply from our support team.</p>
+    <hr style="border-color:rgba(255,255,255,0.1); margin:20px 0;">
+    <h3 style="margin:0 0 12px;">Response:</h3>
+    <div style="background:rgba(255,255,255,0.05); padding:16px; border-radius:6px; margin-bottom:24px;">
+      ${ticketData.message.replace(/\n/g, '<br>')}
+    </div>
+    <div style="text-align:center;">
+      <a href="${config.frontendUrl}/support/my-tickets" style="display:inline-block; background:#8c3232; color:white; padding:10px 24px; border-radius:6px; text-decoration:none;">View Your Ticket →</a>
+    </div>
+    <p style="margin-top:20px; font-size:14px;">Reply directly from your ticket dashboard.</p>
   `;
+  
+  return wrapEmailHtml({ bodyHtml: body, preheader: `Admin replied to your ticket #${ticketData.ticketId}` });
+};
 
-  const text = `We replied to your ticket
-
-Hi ${ticket.name}, our support team has replied to your ticket:
-
-"${preview(messageText)}"
-
-View the full conversation: ${userTicketUrl}`;
-
+// FIXED: Expects ticket object AND reply message text
+export const sendAdminReplyUserEmail = async (ticket: {
+  _id: any;
+  name: string;
+  email: string;
+  category: string;
+  message: string;
+}, replyText: string): Promise<boolean> => {
+  const ticketId = ticket._id.toString();
+  const html = adminReplyUserEmailHtml({
+    ticketId,
+    message: replyText,
+  });
+  const text = `Admin replied to your ticket #${ticketId}\n\nResponse: ${replyText}`;
+  
   return sendEmail({
     to: ticket.email,
     subject: 'VoyageurAI Support — Reply on your ticket',
     text,
-    html: wrapEmailHtml({
-      preheader: preview(messageText, 100),
-      bodyHtml,
-    }),
+    html,
+  });
+};
+
+// ─── Password Reset Email (Round 6) ────────────────────────────────────────
+export const passwordResetEmailHtml = (resetToken: string): string => {
+  const resetLink = `${config.frontendUrl}/reset-password/${resetToken}`;
+  const body = `
+    <h2 style="margin:0 0 16px;">🔐 Password Reset Request</h2>
+    <p style="margin:0 0 16px; line-height:1.6;">We received a request to reset your password. Click the button below to create a new password:</p>
+    <div style="text-align:center; margin:28px 0;">
+      <a href="${resetLink}" style="display:inline-block; background:#8c3232; color:white; padding:12px 28px; border-radius:6px; text-decoration:none; font-weight:600;">Reset Password →</a>
+    </div>
+    <p style="margin:20px 0 12px; font-size:14px; color:#aaa;">This link will expire in <strong>1 hour</strong>.</p>
+    <hr style="border-color:rgba(255,255,255,0.1); margin:20px 0;">
+    <p style="margin:0; font-size:13px; color:#888;">If you didn't request this, you can safely ignore this email. Your password will remain unchanged.</p>
+    <p style="margin:10px 0 0; font-size:12px; color:#666;">For security, never share this link with anyone.</p>
+  `;
+  
+  return wrapEmailHtml({ bodyHtml: body, preheader: 'Reset your VoyageurAI password' });
+};
+
+export const sendPasswordResetEmail = async (email: string, resetToken: string): Promise<boolean> => {
+  const html = passwordResetEmailHtml(resetToken);
+  const text = `Reset your VoyageurAI password by clicking this link: ${config.frontendUrl}/reset-password/${resetToken}. This link expires in 1 hour.`;
+  
+  return sendEmail({
+    to: email,
+    subject: 'VoyageurAI - Password Reset Request',
+    text,
+    html,
   });
 };
