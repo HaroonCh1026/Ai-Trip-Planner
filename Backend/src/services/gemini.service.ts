@@ -141,3 +141,145 @@ export const generateTripItinerary = async (
 
   return parsed;
 };
+
+// ─── Refinement prompt builder ─────────────────────────────────────────────
+// For Round 7: conversational refinement. Takes the existing trip + the
+// previously-generated itinerary + a free-text instruction and returns a
+// fresh, fully-replaced itinerary that incorporates the user's request.
+//
+// Design notes:
+// - Pakistan-only constraint: prompt explicitly refuses off-Pakistan rewrites.
+//   If user asks to "change destination to Tokyo," AI will keep destination
+//   the same and return a polite note inside the summary.
+// - Currency: PKR is hardcoded into the prompt to prevent USD slippage.
+// - Cultural: prayer times, halal food, modesty, female-traveler safety,
+//   and Northern Areas seasonality are all surfaced as default considerations.
+
+interface RefinementInput {
+  origin: string;
+  destination: string;
+  days: number;
+  budget: number;
+  startDate: string;
+  // The previous itinerary as JSON — what the user is currently looking at.
+  currentItinerary: GeminiItineraryResponse;
+  // Free-text user instruction, e.g. "Suggest cheaper hotels".
+  instruction: string;
+}
+
+const buildRefinementPrompt = (input: RefinementInput): string => {
+  return `You are a strategic travel architect specializing in Pakistani travel. The user has an existing ${input.days}-day itinerary from ${input.origin} to ${input.destination} and wants to refine it.
+
+PAKISTAN-ONLY CONSTRAINT (CRITICAL):
+- This trip MUST stay within Pakistan. Origin: ${input.origin}. Destination: ${input.destination}.
+- If the user's request would change the destination outside Pakistan, IGNORE that part of the request and keep the destination as-is. Note this in the summary.
+- All financial figures MUST remain in PKR (Pakistani Rupee). Never convert to USD or other currencies.
+
+CULTURAL CONTEXT FOR PAKISTANI TRAVELERS:
+- Default to halal food unless user explicitly says otherwise.
+- Build in prayer-friendly buffers (5 daily salah times) around major activities when reasonable.
+- Be aware of female-traveler safety concerns — suggest verified hotels, well-traveled routes, and group tour options when relevant.
+- For Northern Areas (Hunza, Skardu, Naran, Fairy Meadows, Khunjerab): these are SNOW-CLOSED Nov–April. If the trip dates conflict with the user's request, mention the seasonality issue in the summary and adapt accordingly.
+- Prefer authentic local options: Daewoo/Faisal Movers (highways), HIACE/Coasters (Northern), PIA/SereneAir/Airblue (domestic flights), Careem/inDrive (urban rides). NO Uber (left Pakistan in 2022).
+
+REFINEMENT TASK:
+The user's current itinerary is:
+${JSON.stringify(input.currentItinerary, null, 2)}
+
+The user's refinement request is:
+"${input.instruction}"
+
+Apply this refinement intelligently. You may:
+- Adjust hotel choices (cheaper/pricier/different vibe)
+- Swap activities (skip museums, add markets, add shrines, add food spots, etc.)
+- Modify pace (more relaxed, more packed)
+- Change transport (bus vs flight vs train)
+- Add cultural/religious elements (mosques, dargahs, langar)
+- Restructure days
+
+You MUST:
+- Keep the same destination, dates, and total number of days unless the user explicitly asked to change them.
+- Stay within or close to the original budget of PKR ${input.budget} (you may go up to 20% over if user asked for "premium" / "luxury", or down to 50% under if user asked for "budget" / "cheaper").
+- Return a COMPLETE replacement itinerary, not a partial diff.
+
+IMPORTANT: Return ONLY raw JSON. No markdown. No backticks. No explanation. Start your response with { and end with }. Use the EXACT same schema as the current itinerary:
+{
+  "summary": "Brief executive summary noting what changed in this refinement",
+  "totalEstimatedCost": 250000,
+  "days": [
+    {
+      "day": 1,
+      "title": "Day title",
+      "activities": [
+        { "time": "09:00", "type": "activity", "name": "...", "location": "...", "duration": "...", "cost": 5000, "tips": "..." }
+      ],
+      "hotel": { "name": "...", "location": "...", "price": "PKR ...", "rating": 4.5, "why": "..." },
+      "dailyCost": 65000
+    }
+  ],
+  "tips": ["...", "...", "..."],
+  "bestTimeToVisit": "...",
+  "currency": "Pakistani Rupee (PKR)",
+  "language": "Urdu/English",
+  "emergencyNumbers": "15 (Police), 1122 (Medical)"
+}`;
+};
+
+/**
+ * Refine an existing itinerary based on a user instruction.
+ *
+ * Returns a fresh full itinerary — caller is responsible for storing it
+ * in the trip's `refinements` history and updating the active itinerary.
+ */
+export const refineTripItinerary = async (
+  input: RefinementInput
+): Promise<GeminiItineraryResponse> => {
+  const model = genAI.getGenerativeModel({
+    model: config.gemini.model,
+    generationConfig: {
+      // Slightly lower temperature than initial generation — refinement should
+      // make focused changes, not get creative with the whole thing.
+      temperature: 0.6,
+      topP: 0.9,
+      maxOutputTokens: 8192,
+      responseMimeType: 'application/json',
+    },
+  });
+
+  // Same 45s timeout as initial generation — refinement is single Gemini call.
+  const AI_TIMEOUT_MS = 45_000;
+  let raw: string;
+  try {
+    const generation = model.generateContent(buildRefinementPrompt(input));
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Gemini API call timed out after ${AI_TIMEOUT_MS / 1000}s`)),
+        AI_TIMEOUT_MS
+      )
+    );
+    const result = await Promise.race([generation, timeout]);
+    raw = result.response.text();
+  } catch (err) {
+    throw new Error(`Gemini API call failed: ${(err as Error).message}`);
+  }
+
+  if (config.nodeEnv === 'development') {
+    console.log('\n[Gemini refinement raw - first 300 chars]:\n', raw.slice(0, 300), '\n');
+  }
+
+  const cleaned = extractJSON(raw);
+
+  let parsed: GeminiItineraryResponse;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    console.error('[Gemini refinement parse failed] Full raw output:\n', raw.slice(0, 800));
+    throw new Error('AI returned malformed JSON during refinement. Please try again.');
+  }
+
+  if (!parsed.days || !Array.isArray(parsed.days) || parsed.days.length === 0) {
+    throw new Error('AI returned an empty itinerary during refinement. Please try again.');
+  }
+
+  return parsed;
+};

@@ -53,6 +53,16 @@ export interface IItineraryDay {
   dailyCost: number;
 }
 
+// ─── Round 7: refinement history entry ──────────────────────────────────────
+export interface ITripRefinement {
+  _id?: Types.ObjectId;
+  instruction: string;
+  itinerarySnapshot?: unknown; // Mixed in Mongoose; opaque on the type side
+  summary?: string;
+  totalCost?: number;
+  createdAt: Date;
+}
+
 export interface ITrip extends Document {
   _id: Types.ObjectId;
   userId: Types.ObjectId;
@@ -72,6 +82,8 @@ export interface ITrip extends Document {
   language: string;
   emergencyNumbers?: string;
   status: 'upcoming' | 'completed' | 'cancelled';
+  // ─── Round 7: append-only refinement history ──────────────────────────────
+  refinements: ITripRefinement[];
   createdAt: Date;
 }
 

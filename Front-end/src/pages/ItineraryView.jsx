@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { C } from "../styles/colors";
 import { Icon } from "../components/Icon";
 import { tripService } from "../services/tripService";
@@ -6,11 +7,21 @@ import ItineraryHero from "../components/itinerary/ItineraryHero";
 import ItinerarySummary from "../components/itinerary/ItinerarySummary";
 import DaySidebar from "../components/itinerary/DaySidebar";
 import DayDetails from "../components/itinerary/DayDetails";
+import RefinePanel from "../components/itinerary/RefinePanel";
 
 export default function ItineraryView({ trip, onBack }) {
+  const navigate = useNavigate();
   const [activeDay, setActiveDay] = useState(0);
   const [fullTrip, setFullTrip] = useState(trip);
   const [loading, setLoading] = useState(false);
+
+  // Read user from localStorage (kept in sync by AuthPage / ProfilePage).
+  // Refinement availability depends on user.plan === 'pro'.
+  const user = (() => {
+    try { return JSON.parse(localStorage.getItem("user") || "null"); }
+    catch { return null; }
+  })();
+  const isPro = user?.plan === "pro";
 
   // Keep fullTrip in sync with the incoming trip prop.
   // This matters when the route id changes (user navigates /itinerary/a -> /itinerary/b)
@@ -67,6 +78,16 @@ export default function ItineraryView({ trip, onBack }) {
     );
   }
 
+  // Callback from RefinePanel after a successful refine — receives the
+  // updated trip from the API and we swap it into local state. We also clamp
+  // activeDay in case the new itinerary has fewer days than the old one.
+  const handleTripUpdated = (updatedTrip) => {
+    setFullTrip(updatedTrip);
+    if (updatedTrip.itinerary && activeDay >= updatedTrip.itinerary.length) {
+      setActiveDay(0);
+    }
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: C.nearBlack }}>
       <ItineraryHero trip={fullTrip} onBack={onBack} />
@@ -101,6 +122,16 @@ export default function ItineraryView({ trip, onBack }) {
             
             <DayDetails currentDay={currentDay} activeDay={activeDay} />
           </div>
+        )}
+
+        {/* Round 7: conversational refinement panel — Pro feature */}
+        {days.length > 0 && (
+          <RefinePanel
+            trip={fullTrip}
+            isPro={isPro}
+            onTripUpdated={handleTripUpdated}
+            onUpgradeClick={() => navigate("/profile?tab=billing")}
+          />
         )}
       </div>
     </div>

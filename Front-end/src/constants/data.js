@@ -308,43 +308,50 @@ export const BLOGS = [
   },
 ];
 
-// ── CHATBOT_QUESTIONS (UNCHANGED) ────────────────────────────────────────────
+// ── CHATBOT_QUESTIONS ─────────────────────────────────────────────────────
+// Friendlier, Pakistan-flavored question text. Each entry has a `label` used
+// by the review screen to show a clean field name instead of the raw id.
 export const CHATBOT_QUESTIONS = [
   {
     id: "origin",
-    question: "Please provide your point of departure.",
-    placeholder: "e.g., Karachi, Pakistan",
+    label: "Starting from",
+    question: "Where will your trip begin? Type any city in Pakistan.",
+    placeholder: "e.g., Karachi or Lahore",
     type: "text",
   },
   {
     id: "destination",
-    question: "Where is your intended destination?",
-    placeholder: "e.g., Hunza, Pakistan",
+    label: "Going to",
+    question: "Where would you like to go? Pick a destination in Pakistan.",
+    placeholder: "e.g., Hunza Valley or Skardu",
     type: "text",
   },
   {
     id: "days",
-    question: "What is the intended duration of your stay in days?",
+    label: "Number of days",
+    question: "How many days will your trip be? (1 to 30)",
     placeholder: "e.g., 7",
     type: "number",
   },
   {
     id: "startDate",
-    question: "What is your anticipated departure date?",
-    placeholder: "e.g., 2025-06-15",
+    label: "Departure date",
+    question: "When are you planning to leave?",
+    placeholder: "Select a date",
     type: "date",
   },
   {
     id: "budget",
-    question: "What is your projected total budget in PKR?",
+    label: "Total budget (PKR)",
+    question: "What's your total trip budget in PKR?",
     placeholder: "e.g., 150000",
     type: "number",
   },
   {
     id: "preferences",
-    question:
-      "Specify travel preferences (e.g., Culture, Culinary, Architecture, Nature).",
-    placeholder: "e.g., Culture, Food",
+    label: "Your interests",
+    question: "What are you most interested in? Food, nature, history, shopping, anything else.",
+    placeholder: "e.g., Food, Mountains, History",
     type: "text",
   },
 ];

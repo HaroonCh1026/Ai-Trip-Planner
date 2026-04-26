@@ -42,6 +42,24 @@ const itineraryDaySchema = new Schema(
   { _id: false }
 );
 
+// ─── Refinement sub-schema (Round 7) ──────────────────────────────────────
+// Each refinement records the user's instruction and the resulting itinerary
+// snapshot, so users can see the evolution of their trip and (future feature)
+// roll back to a previous version. Append-only.
+const refinementSchema = new Schema(
+  {
+    instruction: { type: String, required: true, maxlength: 500 },
+    // Snapshot of the itinerary AFTER this refinement was applied.
+    // Stored as flexible Mixed type since the AI may add new top-level fields
+    // over time and we don't want strict Mongoose validation to reject them.
+    itinerarySnapshot: { type: Schema.Types.Mixed },
+    summary: { type: String, default: '' },
+    totalCost: { type: Number, default: 0 },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: true } // give each refinement its own _id so future rollback can reference it
+);
+
 // ─── Trip schema ───────────────────────────────────────────────────────────
 const tripSchema = new Schema<ITrip>(
   {
@@ -76,6 +94,12 @@ const tripSchema = new Schema<ITrip>(
       enum: ['upcoming', 'completed', 'cancelled'],
       default: 'upcoming',
     },
+
+    // ── Refinement history (Round 7) ──────────────────────────────────────
+    // Append-only list of every refinement made to this trip. The CURRENT
+    // active itinerary lives in `itinerary` above (we replace it on each
+    // refinement). This array is the audit trail — most recent last.
+    refinements: { type: [refinementSchema], default: [] },
   },
   {
     timestamps: true,
