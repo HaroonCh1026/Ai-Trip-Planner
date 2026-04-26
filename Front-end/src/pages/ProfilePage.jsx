@@ -1,0 +1,1519 @@
+import { useState, useRef } from "react";
+import { C } from "../styles/colors";
+import { Icon } from "../components/Icon";
+import api from "../api/client";
+
+// /uploads/... is served by the backend, not Vite. Resolve relative URLs
+// against the API origin. data: URLs and absolute URLs (Google profile pics,
+// blob: previews) pass through unchanged.
+const API_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:5000/api")
+  .replace(/\/api\/?$/, "");
+const resolveAvatarUrl = (url) => {
+  if (!url) return "";
+  if (/^(https?:|data:|blob:)/i.test(url)) return url;
+  if (url.startsWith("/")) return API_ORIGIN + url;
+  return url;
+};
+
+export default function ProfilePage({
+  user,
+  trips,
+  freeLeft,
+  onLogout,
+  onUserUpdate,
+}) {
+  const [section, setSection] = useState("personal");
+  const [editMode, setEditMode] = useState(false);
+  const [info, setInfo] = useState({
+    name: user.name || "",
+    email: user.email || "",
+    phone: user.phone || "",
+    city: user.city || "",
+    bio: user.bio || "",
+  });
+  const [avatar, setAvatar] = useState(user.avatar || "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
+  const [pw, setPw] = useState({ current: "", newPw: "", confirm: "" });
+  const [pwErr, setPwErr] = useState("");
+  const [pwOk, setPwOk] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [prefs, setPrefs] = useState({
+    nature: true,
+    culture: true,
+    food: false,
+    adventure: false,
+    luxury: true,
+    budget: false,
+  });
+  const [notifs, setNotifs] = useState({
+    tripReminders: true,
+    newFeatures: true,
+    promotions: false,
+    weeklyDigest: true,
+  });
+  const fileRef = useRef();
+
+  const isPro = user.plan === "pro";
+  const FREE_LIMIT = 5;
+  const initials = (info.name || "U")
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
+  // Upload immediately to the dedicated /auth/avatar endpoint.
+  // Updates the avatar URL in state + persists user to localStorage on success.
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setSaveErr("Image must be under 2MB.");
+      return;
+    }
+    if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type)) {
+      setSaveErr("Only JPEG, PNG, WebP, or GIF images are allowed.");
+      return;
+    }
+    setSaveErr("");
+    setSaving(true);
+    let localPreview = "";
+    try {
+      // Show a local preview instantly so the UI feels responsive.
+      localPreview = URL.createObjectURL(file);
+      setAvatar(localPreview);
+
+      const fd = new FormData();
+      fd.append("image", file);
+      const { data } = await api.post("/auth/avatar", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const u = data.data.user;
+      // Server URL becomes the canonical avatar (the local blob URL was just for preview).
+      setAvatar(u.avatar || "");
+      localStorage.setItem("user", JSON.stringify({ ...user, ...u }));
+      if (onUserUpdate) onUserUpdate(u);
+    } catch (err) {
+      setSaveErr(err.response?.data?.message || "Image upload failed.");
+      // Roll back preview on failure
+      setAvatar(user.avatar || "");
+    } finally {
+      if (localPreview) URL.revokeObjectURL(localPreview);
+      setSaving(false);
+      // Reset the file input so picking the same file again triggers onChange
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const handleSave = async () => {
+    if (!info.name.trim()) {
+      setSaveErr("Name cannot be empty.");
+      return;
+    }
+    setSaving(true);
+    setSaveErr("");
+    try {
+      const { data } = await api.patch("/auth/profile", {
+        name: info.name,
+        phone: info.phone,
+        city: info.city,
+        bio: info.bio,
+      });
+      const u = data.data.user;
+      localStorage.setItem("user", JSON.stringify({ ...user, ...u }));
+      if (onUserUpdate) onUserUpdate(u);
+      setSaved(true);
+      setEditMode(false);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setSaveErr(err.response?.data?.message || "Failed to save.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePwChange = async () => {
+    setPwErr("");
+    setPwOk(false);
+    if (!pw.current || !pw.newPw || !pw.confirm) {
+      setPwErr("All fields required.");
+      return;
+    }
+    if (pw.newPw.length < 8) {
+      setPwErr("Password must be at least 8 characters.");
+      return;
+    }
+    if (pw.newPw !== pw.confirm) {
+      setPwErr("Passwords do not match.");
+      return;
+    }
+    setPwSaving(true);
+    try {
+      await api.patch("/auth/profile", {
+        currentPassword: pw.current,
+        newPassword: pw.newPw,
+      });
+      setPwOk(true);
+      setPw({ current: "", newPw: "", confirm: "" });
+      setTimeout(() => setPwOk(false), 3000);
+    } catch (err) {
+      setPwErr(err.response?.data?.message || "Password update failed.");
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
+  const Tab = ({ id, label }) => (
+    <button
+      onClick={() => setSection(id)}
+      style={{
+        padding: "10px 16px",
+        borderRadius: 6,
+        border: "none",
+        cursor: "pointer",
+        fontSize: 13,
+        fontWeight: 500,
+        fontFamily: "'DM Sans', sans-serif",
+        textAlign: "left",
+        background: section === id ? "rgba(140,50,50,0.15)" : "transparent",
+        color: section === id ? C.crimson : C.midGray,
+        borderLeft: `3px solid ${section === id ? C.crimson : "transparent"}`,
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  if (!user) return null;
+
+  return (
+    <div style={{ maxWidth: 900 }}>
+      {showUpgrade && (
+        <UpgradeModal
+          user={user}
+          onClose={() => setShowUpgrade(false)}
+          onUserUpdate={onUserUpdate}
+        />
+      )}
+
+      <div style={{ marginBottom: 32 }}>
+        <p className="section-label">Account Management</p>
+        <h1
+          className="display-heading"
+          style={{ fontSize: "clamp(26px, 4vw, 40px)" }}
+        >
+          Your Profile
+        </h1>
+      </div>
+
+      {saved && (
+        <div
+          style={{
+            background: "rgba(50,180,50,0.12)",
+            border: "1px solid #5CCC5C",
+            borderRadius: 8,
+            padding: "12px 20px",
+            marginBottom: 24,
+            fontSize: 14,
+          }}
+        >
+          ✓ Changes saved.
+        </div>
+      )}
+      {saveErr && (
+        <div
+          style={{
+            background: "rgba(200,50,50,0.12)",
+            border: "1px solid rgba(200,50,50,0.4)",
+            borderRadius: 8,
+            padding: "12px 20px",
+            marginBottom: 24,
+            fontSize: 14,
+            color: "#FF6B6B",
+          }}
+        >
+          {saveErr}
+        </div>
+      )}
+
+      <div
+        style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 32 }}
+      >
+        {/* Sidebar */}
+        <div>
+          <div
+            className="card"
+            style={{ padding: 24, textAlign: "center", marginBottom: 16 }}
+          >
+            {/* Avatar with upload */}
+            <div
+              style={{
+                position: "relative",
+                width: 80,
+                height: 80,
+                margin: "0 auto 12px",
+                cursor: "pointer",
+              }}
+              onClick={() => fileRef.current?.click()}
+            >
+              {avatar ? (
+                <img
+                  src={resolveAvatarUrl(avatar)}
+                  alt="avatar"
+                  style={{
+                    width: 80,
+                    height: 80,
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    border: `2px solid ${C.crimson}`,
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 80,
+                    height: 80,
+                    background: `linear-gradient(135deg, ${C.crimson}, ${C.crimsonDark})`,
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 28,
+                    fontWeight: 700,
+                    boxShadow: "0 8px 24px rgba(140,50,50,0.3)",
+                  }}
+                >
+                  {initials}
+                </div>
+              )}
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 0,
+                  right: 0,
+                  width: 24,
+                  height: 24,
+                  background: C.crimson,
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 11,
+                  border: "2px solid #0D0D0D",
+                }}
+              >
+                📷
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={handleAvatarChange}
+              />
+            </div>
+            <div
+              style={{
+                fontFamily: "'Playfair Display', serif",
+                fontSize: 16,
+                fontWeight: 600,
+              }}
+            >
+              {info.name}
+            </div>
+            <div style={{ color: C.midGray, fontSize: 12, marginTop: 4 }}>
+              {info.city || "Pakistan"}
+            </div>
+            <div
+              style={{
+                marginTop: 10,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "3px 10px",
+                background: isPro
+                  ? "rgba(50,180,50,0.15)"
+                  : "rgba(140,50,50,0.2)",
+                borderRadius: 20,
+                fontSize: 11,
+                color: isPro ? "#5CCC5C" : C.crimson,
+              }}
+            >
+              {isPro ? "⭐ Pro Plan" : "Free Plan"}
+            </div>
+          </div>
+          <div
+            className="card"
+            style={{
+              padding: 8,
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+            }}
+          >
+            <Tab id="personal" label="Personal Info" />
+            <Tab id="preferences" label="Travel Preferences" />
+            <Tab id="security" label="Security" />
+            <Tab id="notifications" label="Notifications" />
+            <Tab id="plan" label="Plan & Billing" />
+            <Tab id="danger" label="Account" />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div>
+          {/* PERSONAL INFO */}
+          {section === "personal" && (
+            <div className="card" style={{ padding: 32 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 28,
+                }}
+              >
+                <div>
+                  <h2
+                    style={{
+                      fontFamily: "'Playfair Display', serif",
+                      fontSize: 22,
+                    }}
+                  >
+                    Personal Information
+                  </h2>
+                  <p style={{ color: C.midGray, fontSize: 13, marginTop: 4 }}>
+                    Click the camera icon above to change your profile photo
+                  </p>
+                </div>
+                <button
+                  onClick={() => (editMode ? handleSave() : setEditMode(true))}
+                  className={editMode ? "btn-primary" : "btn-secondary"}
+                  style={{ padding: "9px 20px", fontSize: 13 }}
+                  disabled={saving}
+                >
+                  {saving
+                    ? "Saving..."
+                    : editMode
+                      ? "Save Changes"
+                      : "Edit Profile"}
+                </button>
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 20,
+                }}
+              >
+                {[
+                  { label: "Full Name", key: "name" },
+                  { label: "Email Address", key: "email", ro: true },
+                  { label: "Phone Number", key: "phone" },
+                  { label: "City", key: "city" },
+                ].map(({ label, key, ro }) => (
+                  <div key={key}>
+                    <label
+                      style={{
+                        fontSize: 12,
+                        color: C.midGray,
+                        marginBottom: 6,
+                        display: "block",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      {label}
+                    </label>
+                    {editMode && !ro ? (
+                      <input
+                        value={info[key]}
+                        onChange={(e) =>
+                          setInfo((p) => ({ ...p, [key]: e.target.value }))
+                        }
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          fontSize: 14,
+                          padding: "12px 16px",
+                          background: "rgba(255,255,255,0.03)",
+                          borderRadius: 6,
+                          border: "1px solid rgba(255,255,255,0.06)",
+                          color: info[key] ? C.offWhite : C.midGray,
+                        }}
+                      >
+                        {info[key] || (
+                          <span style={{ fontStyle: "italic" }}>Not set</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 20 }}>
+                <label
+                  style={{
+                    fontSize: 12,
+                    color: C.midGray,
+                    marginBottom: 6,
+                    display: "block",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  Bio
+                </label>
+                {editMode ? (
+                  <textarea
+                    value={info.bio}
+                    onChange={(e) =>
+                      setInfo((p) => ({ ...p, bio: e.target.value }))
+                    }
+                    style={{ minHeight: 80, resize: "vertical" }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      fontSize: 14,
+                      padding: "12px 16px",
+                      background: "rgba(255,255,255,0.03)",
+                      borderRadius: 6,
+                      border: "1px solid rgba(255,255,255,0.06)",
+                      color: info.bio ? C.offWhite : C.midGray,
+                      fontStyle: info.bio ? "normal" : "italic",
+                      minHeight: 60,
+                    }}
+                  >
+                    {info.bio || "No bio added yet."}
+                  </div>
+                )}
+              </div>
+              {editMode && (
+                <button
+                  onClick={() => {
+                    setEditMode(false);
+                    setSaveErr("");
+                  }}
+                  style={{
+                    marginTop: 12,
+                    background: "transparent",
+                    border: "none",
+                    color: C.midGray,
+                    cursor: "pointer",
+                    fontSize: 13,
+                  }}
+                >
+                  Cancel
+                </button>
+              )}
+              <div
+                style={{
+                  height: 1,
+                  background: "rgba(255,255,255,0.06)",
+                  margin: "28px 0",
+                }}
+              />
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: 16,
+                }}
+              >
+                {[
+                  { label: "Member Since", value: user.joinDate || "2025" },
+                  { label: "Total Itineraries", value: trips.length },
+                  { label: "Sign-in Method", value: user.provider || "Email" },
+                ].map(({ label, value }) => (
+                  <div
+                    key={label}
+                    style={{
+                      padding: 16,
+                      background: "rgba(255,255,255,0.03)",
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: C.midGray,
+                        marginBottom: 4,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.1em",
+                      }}
+                    >
+                      {label}
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 15 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* PREFERENCES */}
+          {section === "preferences" && (
+            <div className="card" style={{ padding: 32 }}>
+              <h2
+                style={{
+                  fontFamily: "'Playfair Display', serif",
+                  fontSize: 22,
+                  marginBottom: 8,
+                }}
+              >
+                Travel Preferences
+              </h2>
+              <p style={{ color: C.midGray, fontSize: 13, marginBottom: 28 }}>
+                Helps our AI generate more personalised itineraries
+              </p>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  marginBottom: 28,
+                }}
+              >
+                {Object.entries(prefs).map(([k, active]) => (
+                  <button
+                    key={k}
+                    onClick={() => setPrefs((p) => ({ ...p, [k]: !p[k] }))}
+                    style={{
+                      padding: "8px 18px",
+                      borderRadius: 20,
+                      border: `1.5px solid ${active ? C.crimson : "rgba(255,255,255,0.12)"}`,
+                      background: active
+                        ? "rgba(140,50,50,0.2)"
+                        : "transparent",
+                      color: active ? C.crimson : C.midGray,
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      textTransform: "capitalize",
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  setSaved(true);
+                  setTimeout(() => setSaved(false), 3000);
+                }}
+              >
+                Save Preferences
+              </button>
+            </div>
+          )}
+
+          {/* SECURITY */}
+          {section === "security" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div className="card" style={{ padding: "28px 32px" }}>
+                <h2
+                  style={{
+                    fontFamily: "'Playfair Display', serif",
+                    fontSize: 20,
+                    marginBottom: 6,
+                  }}
+                >
+                  Change Password
+                </h2>
+                <p style={{ color: C.midGray, fontSize: 13, marginBottom: 24 }}>
+                  {user.provider !== "email"
+                    ? "Password change is only available for email accounts."
+                    : "Use a strong password with at least 8 characters"}
+                </p>
+                {user.provider === "email" && (
+                  <>
+                    {pwErr && (
+                      <div
+                        style={{
+                          background: "rgba(200,50,50,0.12)",
+                          border: "1px solid rgba(200,50,50,0.4)",
+                          borderRadius: 6,
+                          padding: "10px 16px",
+                          marginBottom: 16,
+                          fontSize: 13,
+                          color: "#FF6B6B",
+                        }}
+                      >
+                        {pwErr}
+                      </div>
+                    )}
+                    {pwOk && (
+                      <div
+                        style={{
+                          background: "rgba(50,180,50,0.12)",
+                          border: "1px solid #5CCC5C",
+                          borderRadius: 6,
+                          padding: "10px 16px",
+                          marginBottom: 16,
+                          fontSize: 13,
+                        }}
+                      >
+                        Password updated!
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 14,
+                      }}
+                    >
+                      <div>
+                        <label
+                          style={{
+                            fontSize: 12,
+                            color: C.midGray,
+                            marginBottom: 6,
+                            display: "block",
+                          }}
+                        >
+                          Current Password
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="••••••••"
+                          value={pw.current}
+                          onChange={(e) =>
+                            setPw((p) => ({ ...p, current: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: 12,
+                        }}
+                      >
+                        <div>
+                          <label
+                            style={{
+                              fontSize: 12,
+                              color: C.midGray,
+                              marginBottom: 6,
+                              display: "block",
+                            }}
+                          >
+                            New Password
+                          </label>
+                          <input
+                            type="password"
+                            placeholder="••••••••"
+                            value={pw.newPw}
+                            onChange={(e) =>
+                              setPw((p) => ({ ...p, newPw: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label
+                            style={{
+                              fontSize: 12,
+                              color: C.midGray,
+                              marginBottom: 6,
+                              display: "block",
+                            }}
+                          >
+                            Confirm
+                          </label>
+                          <input
+                            type="password"
+                            placeholder="••••••••"
+                            value={pw.confirm}
+                            onChange={(e) =>
+                              setPw((p) => ({ ...p, confirm: e.target.value }))
+                            }
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      className="btn-primary"
+                      style={{ marginTop: 20, fontSize: 13 }}
+                      onClick={handlePwChange}
+                      disabled={pwSaving}
+                    >
+                      {pwSaving ? "Updating..." : "Update Password"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* NOTIFICATIONS */}
+          {section === "notifications" && (
+            <div className="card" style={{ padding: 32 }}>
+              <h2
+                style={{
+                  fontFamily: "'Playfair Display', serif",
+                  fontSize: 22,
+                  marginBottom: 8,
+                }}
+              >
+                Notifications
+              </h2>
+              <p style={{ color: C.midGray, fontSize: 13, marginBottom: 28 }}>
+                Control how VoyageurAI communicates with you
+              </p>
+              {[
+                {
+                  key: "tripReminders",
+                  label: "Trip Reminders",
+                  desc: "Get notified before upcoming trips",
+                },
+                {
+                  key: "newFeatures",
+                  label: "New Features",
+                  desc: "Hear about new AI capabilities",
+                },
+                {
+                  key: "promotions",
+                  label: "Promotions",
+                  desc: "Exclusive deals and offers",
+                },
+                {
+                  key: "weeklyDigest",
+                  label: "Weekly Digest",
+                  desc: "Curated Pakistan highlights every Monday",
+                },
+              ].map(({ key, label, desc }, i, a) => (
+                <div
+                  key={key}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "18px 0",
+                    borderBottom:
+                      i < a.length - 1
+                        ? "1px solid rgba(255,255,255,0.06)"
+                        : "none",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{label}</div>
+                    <div
+                      style={{ fontSize: 12, color: C.midGray, marginTop: 2 }}
+                    >
+                      {desc}
+                    </div>
+                  </div>
+                  <div
+                    onClick={() => setNotifs((n) => ({ ...n, [key]: !n[key] }))}
+                    style={{
+                      width: 44,
+                      height: 24,
+                      borderRadius: 12,
+                      background: notifs[key]
+                        ? C.crimson
+                        : "rgba(255,255,255,0.15)",
+                      cursor: "pointer",
+                      position: "relative",
+                      transition: "background 0.25s",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: "50%",
+                        background: "#fff",
+                        position: "absolute",
+                        top: 3,
+                        left: notifs[key] ? 23 : 3,
+                        transition: "left 0.25s",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* PLAN & BILLING — FIXED VERSION */}
+          {section === "plan" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div className="card" style={{ padding: "28px 32px" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <div>
+                    <h2
+                      style={{
+                        fontFamily: "'Playfair Display', serif",
+                        fontSize: 20,
+                        marginBottom: 4,
+                      }}
+                    >
+                      Current Plan
+                    </h2>
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "4px 12px",
+                        background: isPro
+                          ? "rgba(50,180,50,0.15)"
+                          : "rgba(140,50,50,0.2)",
+                        borderRadius: 20,
+                        fontSize: 12,
+                        color: isPro ? "#5CCC5C" : C.crimson,
+                        marginTop: 6,
+                      }}
+                    >
+                      {isPro ? "⭐ Pro Plan — Unlimited" : "Free Tier"}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 700,
+                        fontFamily: "'Playfair Display', serif",
+                      }}
+                    >
+                      {isPro ? "PKR 2,500" : "PKR 0"}
+                    </div>
+                    <div style={{ color: C.midGray, fontSize: 12 }}>
+                      per month
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    height: 1,
+                    background: "rgba(255,255,255,0.06)",
+                    margin: "20px 0",
+                  }}
+                />
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 12,
+                    marginBottom: 20,
+                  }}
+                >
+                  {(isPro
+                    ? [
+                        { label: "AI Itineraries", value: "Unlimited ∞" },
+                        { label: "Trips Created", value: trips.length },
+                        { label: "Plan Status", value: "Active" },
+                        { label: "Payment Method", value: "Stripe" },
+                      ]
+                    : [
+                        {
+                          label: "AI Itineraries Used",
+                          value: `${trips.length} of 5`,
+                        },
+                        {
+                          label: "Remaining Quota",
+                          value: `${Math.max(0, freeLeft)} itineraries`,
+                        },
+                        { label: "Plan Status", value: "Free Tier" },
+                        { label: "Payment Method", value: "Not required" },
+                      ]
+                  ).map(({ label, value }) => (
+                    <div
+                      key={label}
+                      style={{
+                        padding: "12px 14px",
+                        background: "rgba(255,255,255,0.03)",
+                        borderRadius: 8,
+                        border: "1px solid rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: C.midGray,
+                          marginBottom: 4,
+                        }}
+                      >
+                        {label}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 500,
+                          color:
+                            isPro && label === "AI Itineraries"
+                              ? "#5CCC5C"
+                              : C.offWhite,
+                        }}
+                      >
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {isPro ? (
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      background: "rgba(50,180,50,0.1)",
+                      border: "1px solid rgba(50,180,50,0.3)",
+                      borderRadius: 8,
+                      fontSize: 13,
+                      color: "#5CCC5C",
+                    }}
+                  >
+                    ✓ Pro plan active — enjoy unlimited AI-powered itineraries!
+                  </div>
+                ) : (
+                  <button
+                    className="btn-primary"
+                    style={{
+                      width: "100%",
+                      justifyContent: "center",
+                      padding: 14,
+                    }}
+                    onClick={() => setShowUpgrade(true)}
+                  >
+                    ⭐ Upgrade to Pro — PKR 2,500/month
+                  </button>
+                )}
+              </div>
+              {!isPro && (
+                <div className="card" style={{ padding: "24px 32px" }}>
+                  <h3
+                    style={{
+                      fontFamily: "'Playfair Display', serif",
+                      fontSize: 16,
+                      marginBottom: 16,
+                    }}
+                  >
+                    Pro Features
+                  </h3>
+                  {[
+                    "Unlimited AI itineraries",
+                    "Priority generation (sub-10s)",
+                    "PDF export & sharing",
+                    "WhatsApp trip alerts",
+                    "Advanced budget analytics",
+                    "Exclusive destination insights",
+                  ].map((f) => (
+                    <div
+                      key={f}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        fontSize: 13,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <span style={{ color: "#5CCC5C", fontWeight: 700 }}>
+                        ✓
+                      </span>{" "}
+                      <span style={{ color: C.midGray }}>{f}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* DANGER */}
+          {section === "danger" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div className="card" style={{ padding: "28px 32px" }}>
+                <h2
+                  style={{
+                    fontFamily: "'Playfair Display', serif",
+                    fontSize: 20,
+                    marginBottom: 4,
+                  }}
+                >
+                  Sign Out
+                </h2>
+                <p style={{ color: C.midGray, fontSize: 13, marginBottom: 20 }}>
+                  Sign out of your VoyageurAI account on this device.
+                </p>
+                <button
+                  onClick={onLogout}
+                  className="btn-secondary"
+                  style={{ fontSize: 13, padding: "10px 24px" }}
+                >
+                  Sign out
+                </button>
+              </div>
+              <div
+                className="card"
+                style={{
+                  padding: "28px 32px",
+                  borderColor: "rgba(200,50,50,0.3)",
+                }}
+              >
+                <h2
+                  style={{
+                    fontFamily: "'Playfair Display', serif",
+                    fontSize: 20,
+                    marginBottom: 4,
+                    color: "#FF6B6B",
+                  }}
+                >
+                  Danger Zone
+                </h2>
+                <p style={{ color: C.midGray, fontSize: 13, marginBottom: 20 }}>
+                  These actions are permanent and cannot be undone.
+                </p>
+                {["Delete Account"].map((label) => (
+                  <button
+                    key={label}
+                    style={{
+                      padding: "10px 20px",
+                      background: "transparent",
+                      border: "1.5px solid rgba(200,50,50,0.4)",
+                      borderRadius: 4,
+                      color: "#FF6B6B",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.background = "rgba(200,50,50,0.1)")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.background = "transparent")
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UpgradeModal({ user, onClose, onUserUpdate }) {
+  const [step, setStep] = useState("plan");
+  const [plan, setPlan] = useState("monthly");
+  const [card, setCard] = useState({
+    number: "",
+    expiry: "",
+    cvc: "",
+    name: "",
+  });
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState("");
+  const plans = {
+    monthly: {
+      label: "Monthly",
+      price: "PKR 2,500",
+      period: "/month",
+      savings: null,
+    },
+    annual: {
+      label: "Annual",
+      price: "PKR 25,000",
+      period: "/year",
+      savings: "Save PKR 5,000",
+    },
+  };
+  const fmtCard = (v) =>
+    v
+      .replace(/\D/g, "")
+      .slice(0, 16)
+      .replace(/(.{4})/g, "$1 ")
+      .trim();
+  const fmtExp = (v) => {
+    const d = v.replace(/\D/g, "").slice(0, 4);
+    return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
+  };
+  const pay = async () => {
+    setError("");
+    if (!card.number || !card.expiry || !card.cvc || !card.name) {
+      setError("All card fields required.");
+      return;
+    }
+    if (card.number.replace(/\s/g, "").length < 16) {
+      setError("Enter a valid 16-digit card number.");
+      return;
+    }
+    setProcessing(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/bookings/upgrade`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            plan,
+            testCardNumber: card.number.replace(/\s/g, ""),
+          }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Payment failed");
+      const u = { ...user, plan: "pro" };
+      localStorage.setItem("user", JSON.stringify(u));
+      if (onUserUpdate) onUserUpdate({ plan: "pro" });
+      setStep("success");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.75)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <div
+        className="card"
+        style={{
+          width: "100%",
+          maxWidth: 480,
+          padding: 36,
+          position: "relative",
+        }}
+      >
+        <button
+          onClick={onClose}
+          style={{
+            position: "absolute",
+            top: 16,
+            right: 16,
+            background: "transparent",
+            border: "none",
+            color: C.midGray,
+            cursor: "pointer",
+            fontSize: 20,
+          }}
+        >
+          ×
+        </button>
+        {step === "plan" && (
+          <>
+            <h2
+              style={{
+                fontFamily: "'Playfair Display',serif",
+                fontSize: 24,
+                marginBottom: 6,
+              }}
+            >
+              Choose Your Plan
+            </h2>
+            <p style={{ color: C.midGray, fontSize: 13, marginBottom: 24 }}>
+              Unlock unlimited AI-powered itineraries
+            </p>
+            {Object.entries(plans).map(([k, p]) => (
+              <div
+                key={k}
+                onClick={() => setPlan(k)}
+                style={{
+                  padding: "16px 20px",
+                  borderRadius: 8,
+                  border: `2px solid ${plan === k ? C.crimson : "rgba(255,255,255,0.1)"}`,
+                  background:
+                    plan === k ? "rgba(140,50,50,0.1)" : "transparent",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 12,
+                  transition: "all 0.2s",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>{p.label}</div>
+                  {p.savings && (
+                    <div
+                      style={{ fontSize: 11, color: "#5CCC5C", marginTop: 2 }}
+                    >
+                      {p.savings}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <span
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 700,
+                      fontFamily: "'Playfair Display',serif",
+                    }}
+                  >
+                    {p.price}
+                  </span>
+                  <span style={{ fontSize: 12, color: C.midGray }}>
+                    {p.period}
+                  </span>
+                </div>
+              </div>
+            ))}
+            <button
+              className="btn-primary"
+              style={{
+                width: "100%",
+                justifyContent: "center",
+                padding: 14,
+                marginTop: 8,
+              }}
+              onClick={() => setStep("payment")}
+            >
+              ⭐ Continue to Payment
+            </button>
+            <p
+              style={{
+                textAlign: "center",
+                color: C.midGray,
+                fontSize: 11,
+                marginTop: 12,
+              }}
+            >
+              🔒 Test mode — use card 4242 4242 4242 4242
+            </p>
+          </>
+        )}
+        {step === "payment" && (
+          <>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 20,
+              }}
+            >
+              <button
+                onClick={() => setStep("plan")}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: C.midGray,
+                  cursor: "pointer",
+                  fontSize: 16,
+                }}
+              >
+                ←
+              </button>
+              <h2
+                style={{ fontFamily: "'Playfair Display',serif", fontSize: 22 }}
+              >
+                Payment Details
+              </h2>
+            </div>
+            <div
+              style={{
+                padding: "10px 14px",
+                background: "rgba(255,200,50,0.08)",
+                border: "1px solid rgba(255,200,50,0.25)",
+                borderRadius: 6,
+                marginBottom: 16,
+                fontSize: 12,
+                color: "#FFD166",
+              }}
+            >
+              🧪 Test — card: <strong>4242 4242 4242 4242</strong>, any
+              expiry/CVC
+            </div>
+            {error && (
+              <div
+                style={{
+                  background: "rgba(200,50,50,0.12)",
+                  border: "1px solid rgba(200,50,50,0.4)",
+                  borderRadius: 6,
+                  padding: "10px 14px",
+                  marginBottom: 14,
+                  fontSize: 13,
+                  color: "#FF6B6B",
+                }}
+              >
+                {error}
+              </div>
+            )}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+                marginBottom: 20,
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    fontSize: 12,
+                    color: C.midGray,
+                    display: "block",
+                    marginBottom: 6,
+                  }}
+                >
+                  Cardholder Name
+                </label>
+                <input
+                  placeholder="Ahmed Khan"
+                  value={card.name}
+                  onChange={(e) =>
+                    setCard((c) => ({ ...c, name: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    fontSize: 12,
+                    color: C.midGray,
+                    display: "block",
+                    marginBottom: 6,
+                  }}
+                >
+                  Card Number
+                </label>
+                <input
+                  placeholder="4242 4242 4242 4242"
+                  value={card.number}
+                  onChange={(e) =>
+                    setCard((c) => ({ ...c, number: fmtCard(e.target.value) }))
+                  }
+                  maxLength={19}
+                />
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <label
+                    style={{
+                      fontSize: 12,
+                      color: C.midGray,
+                      display: "block",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Expiry
+                  </label>
+                  <input
+                    placeholder="12/27"
+                    value={card.expiry}
+                    onChange={(e) =>
+                      setCard((c) => ({ ...c, expiry: fmtExp(e.target.value) }))
+                    }
+                    maxLength={5}
+                  />
+                </div>
+                <div>
+                  <label
+                    style={{
+                      fontSize: 12,
+                      color: C.midGray,
+                      display: "block",
+                      marginBottom: 6,
+                    }}
+                  >
+                    CVC
+                  </label>
+                  <input
+                    placeholder="123"
+                    value={card.cvc}
+                    onChange={(e) =>
+                      setCard((c) => ({
+                        ...c,
+                        cvc: e.target.value.replace(/\D/g, "").slice(0, 3),
+                      }))
+                    }
+                    maxLength={3}
+                  />
+                </div>
+              </div>
+            </div>
+            <button
+              className="btn-primary"
+              style={{ width: "100%", justifyContent: "center", padding: 15 }}
+              onClick={pay}
+              disabled={processing}
+            >
+              {processing ? "Processing..." : `🔒 Pay ${plans[plan].price}`}
+            </button>
+          </>
+        )}
+        {step === "success" && (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: "50%",
+                background: "rgba(50,180,50,0.15)",
+                border: "2px solid #5CCC5C",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 20px",
+                fontSize: 32,
+              }}
+            >
+              ✓
+            </div>
+            <h2
+              style={{
+                fontFamily: "'Playfair Display',serif",
+                fontSize: 26,
+                marginBottom: 10,
+              }}
+            >
+              Welcome to Pro!
+            </h2>
+            <p
+              style={{
+                color: C.midGray,
+                fontSize: 14,
+                lineHeight: 1.7,
+                marginBottom: 28,
+              }}
+            >
+              Your Pro subscription is active. Enjoy unlimited itineraries!
+            </p>
+            <button
+              className="btn-primary"
+              style={{ width: "100%", justifyContent: "center", padding: 14 }}
+              onClick={onClose}
+            >
+              Start Planning Unlimited Trips
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
