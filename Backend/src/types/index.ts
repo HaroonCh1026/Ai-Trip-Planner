@@ -19,10 +19,12 @@ export interface IUser extends Document {
   lockedUntil: Date | null;
   createdAt: Date;
   
-  // ─── ADD THESE TWO LINES FOR PASSWORD RESET ──────────────────────────────
+  // ─── Password Reset (Round 6) ────────────────────────────────────────────
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
-  // ────────────────────────────────────────────────────────────────────────
+
+  // ─── Stripe Pro Subscription (NEW - Round 8) ────────────────────────────
+  planExpires?: Date | null;
   
   comparePassword(candidate: string): Promise<boolean>;
 }

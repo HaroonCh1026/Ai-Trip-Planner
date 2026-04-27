@@ -60,11 +60,18 @@ const userSchema = new Schema<IUser>(
     // ─── Password Reset (NEW - Round 6) ────────────────────────────────────
     resetPasswordToken: {
       type: String,
-      select: false, // Don't return by default for security
+      select: false,
     },
     resetPasswordExpires: {
       type: Date,
       select: false,
+    },
+
+    // ─── Stripe Pro Subscription (NEW - Round 8) ───────────────────────────
+    planExpires: {
+      type: Date,
+      default: null,
+      select: false, // Don't return by default
     },
   },
   {
@@ -77,6 +84,7 @@ const userSchema = new Schema<IUser>(
         delete ret['resetPasswordExpires'];
         delete ret['failedLoginAttempts'];
         delete ret['lockedUntil'];
+        delete ret['planExpires']; // Also hide from JSON response
         return ret;
       },
     },

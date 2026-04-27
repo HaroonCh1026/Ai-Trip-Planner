@@ -14,9 +14,21 @@ import bookingRoutes from './routes/booking.routes';
 import adminRoutes from './routes/admin.routes';
 import supportRoutes from './routes/support.routes';
 import blogRoutes from './routes/blog.routes';
+import paymentRoutes from './routes/payment.routes'; // NEW - Round 8
 import { errorHandler, notFound } from './middleware/error.middleware';
 
 const app = express();
+
+// ─── Stripe Webhook: Must be BEFORE express.json() ─────────────────────────
+// Stripe requires raw body for signature verification
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+  // This will be handled by payment controller
+  (async () => {
+    const { handleStripeWebhook } = await import('./controllers/payment.controller');
+    await handleStripeWebhook(req, res);
+  })();
+});
+// ───────────────────────────────────────────────────────────────────────────
 
 // helmet's default crossOriginResourcePolicy is "same-origin", which blocks
 // the Vite dev server (different port) from loading uploaded images. Loosen
@@ -69,9 +81,9 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/admin',    adminRoutes);
 app.use('/api/support',  supportRoutes);
 app.use('/api/blogs',    blogRoutes);
+app.use('/api/payments', paymentRoutes); // NEW - Round 8
 
 app.use(notFound);
 app.use(errorHandler);
-
 
 export default app;

@@ -50,4 +50,20 @@ export const resetPassword = async (token, password) => {
   return response.data;
 };
 
+// ─── Stripe Payment API Functions (NEW - Round 8) ─────────────────────────
+export const createCheckoutSession = async () => {
+  const response = await api.post("/payments/create-checkout-session");
+  return response.data;
+};
+
+export const getSubscriptionStatus = async () => {
+  const response = await api.get("/payments/subscription-status");
+  return response.data;
+};
+
+export const cancelSubscription = async () => {
+  const response = await api.post("/payments/cancel-subscription");
+  return response.data;
+};
+
 export default api;

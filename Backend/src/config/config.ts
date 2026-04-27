@@ -13,6 +13,7 @@ for (const key of required) {
 }
 
 // SMTP is optional (emails will just log if not configured)
+// Stripe is optional for development (will log warning if missing)
 // No need to fail if missing
 
 const config = {
@@ -54,6 +55,16 @@ const config = {
   resend: {
     apiKey: process.env.RESEND_API_KEY || '',
     from: process.env.RESEND_FROM || 'VoyageurAI <onboarding@resend.dev>',
+  },
+
+  // ─── Stripe Payment (NEW - Round 8) ─────────────────────────────────────
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY || '',
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+    proPriceId: process.env.STRIPE_PRO_PRICE_ID || '',
+    successUrl: process.env.STRIPE_SUCCESS_URL || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/success`,
+    cancelUrl: process.env.STRIPE_CANCEL_URL || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/cancel`,
   },
 
   adminEmail: (process.env.ADMIN_EMAIL || 'admin@voyageur.pk').toLowerCase(),

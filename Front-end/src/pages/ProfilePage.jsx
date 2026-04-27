@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { C } from "../styles/colors";
 import { Icon } from "../components/Icon";
-import api from "../api/client";
+import api, { createCheckoutSession } from "../api/client";
 
 // /uploads/... is served by the backend, not Vite. Resolve relative URLs
 // against the API origin. data: URLs and absolute URLs (Google profile pics,
@@ -843,7 +843,7 @@ export default function ProfilePage({
             </div>
           )}
 
-          {/* PLAN & BILLING — FIXED VERSION */}
+          {/* PLAN & BILLING */}
           {section === "plan" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div className="card" style={{ padding: "28px 32px" }}>
@@ -1108,80 +1108,31 @@ export default function ProfilePage({
   );
 }
 
+// ─── Stripe Upgrade Modal (Replaces mock payment) ──────────────────────────
 function UpgradeModal({ user, onClose, onUserUpdate }) {
-  const [step, setStep] = useState("plan");
-  const [plan, setPlan] = useState("monthly");
-  const [card, setCard] = useState({
-    number: "",
-    expiry: "",
-    cvc: "",
-    name: "",
-  });
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState("");
-  const plans = {
-    monthly: {
-      label: "Monthly",
-      price: "PKR 2,500",
-      period: "/month",
-      savings: null,
-    },
-    annual: {
-      label: "Annual",
-      price: "PKR 25,000",
-      period: "/year",
-      savings: "Save PKR 5,000",
-    },
-  };
-  const fmtCard = (v) =>
-    v
-      .replace(/\D/g, "")
-      .slice(0, 16)
-      .replace(/(.{4})/g, "$1 ")
-      .trim();
-  const fmtExp = (v) => {
-    const d = v.replace(/\D/g, "").slice(0, 4);
-    return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
-  };
-  const pay = async () => {
-    setError("");
-    if (!card.number || !card.expiry || !card.cvc || !card.name) {
-      setError("All card fields required.");
-      return;
-    }
-    if (card.number.replace(/\s/g, "").length < 16) {
-      setError("Enter a valid 16-digit card number.");
-      return;
-    }
+
+  const handleUpgrade = async () => {
     setProcessing(true);
+    setError("");
+    
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:5000/api"}/bookings/upgrade`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            plan,
-            testCardNumber: card.number.replace(/\s/g, ""),
-          }),
-        },
-      );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Payment failed");
-      const u = { ...user, plan: "pro" };
-      localStorage.setItem("user", JSON.stringify(u));
-      if (onUserUpdate) onUserUpdate({ plan: "pro" });
-      setStep("success");
+      const response = await createCheckoutSession();
+      if (response.success && response.data.url) {
+        // Redirect to Stripe Checkout
+        window.location.href = response.data.url;
+      } else {
+        setError(response.message || "Failed to create checkout session");
+      }
     } catch (err) {
-      setError(err.message);
+      console.error("Upgrade error:", err);
+      setError(err.response?.data?.message || "Something went wrong. Please try again.");
     } finally {
       setProcessing(false);
     }
   };
+
   return (
     <div
       style={{
@@ -1219,300 +1170,119 @@ function UpgradeModal({ user, onClose, onUserUpdate }) {
         >
           ×
         </button>
-        {step === "plan" && (
-          <>
-            <h2
+        
+        <h2
+          style={{
+            fontFamily: "'Playfair Display',serif",
+            fontSize: 24,
+            marginBottom: 6,
+          }}
+        >
+          Upgrade to Pro
+        </h2>
+        <p style={{ color: C.midGray, fontSize: 13, marginBottom: 24 }}>
+          Unlock unlimited AI-powered itineraries
+        </p>
+        
+        <div
+          style={{
+            padding: "16px 20px",
+            borderRadius: 8,
+            border: `2px solid ${C.crimson}`,
+            background: "rgba(140,50,50,0.1)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 12,
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>Monthly Plan</div>
+            <div style={{ fontSize: 11, color: "#5CCC5C", marginTop: 2 }}>
+              Cancel anytime
+            </div>
+          </div>
+          <div>
+            <span
               style={{
+                fontSize: 22,
+                fontWeight: 700,
                 fontFamily: "'Playfair Display',serif",
-                fontSize: 24,
-                marginBottom: 6,
               }}
             >
-              Choose Your Plan
-            </h2>
-            <p style={{ color: C.midGray, fontSize: 13, marginBottom: 24 }}>
-              Unlock unlimited AI-powered itineraries
-            </p>
-            {Object.entries(plans).map(([k, p]) => (
-              <div
-                key={k}
-                onClick={() => setPlan(k)}
-                style={{
-                  padding: "16px 20px",
-                  borderRadius: 8,
-                  border: `2px solid ${plan === k ? C.crimson : "rgba(255,255,255,0.1)"}`,
-                  background:
-                    plan === k ? "rgba(140,50,50,0.1)" : "transparent",
-                  cursor: "pointer",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 12,
-                  transition: "all 0.2s",
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 15 }}>{p.label}</div>
-                  {p.savings && (
-                    <div
-                      style={{ fontSize: 11, color: "#5CCC5C", marginTop: 2 }}
-                    >
-                      {p.savings}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <span
-                    style={{
-                      fontSize: 22,
-                      fontWeight: 700,
-                      fontFamily: "'Playfair Display',serif",
-                    }}
-                  >
-                    {p.price}
-                  </span>
-                  <span style={{ fontSize: 12, color: C.midGray }}>
-                    {p.period}
-                  </span>
-                </div>
-              </div>
-            ))}
-            <button
-              className="btn-primary"
-              style={{
-                width: "100%",
-                justifyContent: "center",
-                padding: 14,
-                marginTop: 8,
-              }}
-              onClick={() => setStep("payment")}
-            >
-              ⭐ Continue to Payment
-            </button>
-            <p
-              style={{
-                textAlign: "center",
-                color: C.midGray,
-                fontSize: 11,
-                marginTop: 12,
-              }}
-            >
-              🔒 Test mode — use card 4242 4242 4242 4242
-            </p>
-          </>
-        )}
-        {step === "payment" && (
-          <>
+              PKR 2,500
+            </span>
+            <span style={{ fontSize: 12, color: C.midGray }}>
+              /month
+            </span>
+          </div>
+        </div>
+        
+        <div style={{ marginBottom: 20 }}>
+          {[
+            "Unlimited AI itineraries",
+            "Priority generation (sub-10s)",
+            "PDF export & sharing",
+            "WhatsApp trip alerts",
+            "Advanced budget analytics",
+            "Exclusive destination insights",
+          ].map((f) => (
             <div
+              key={f}
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
-                marginBottom: 20,
+                gap: 10,
+                fontSize: 13,
+                marginBottom: 8,
               }}
             >
-              <button
-                onClick={() => setStep("plan")}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: C.midGray,
-                  cursor: "pointer",
-                  fontSize: 16,
-                }}
-              >
-                ←
-              </button>
-              <h2
-                style={{ fontFamily: "'Playfair Display',serif", fontSize: 22 }}
-              >
-                Payment Details
-              </h2>
+              <span style={{ color: "#5CCC5C", fontWeight: 700 }}>✓</span>
+              <span style={{ color: C.midGray }}>{f}</span>
             </div>
-            <div
-              style={{
-                padding: "10px 14px",
-                background: "rgba(255,200,50,0.08)",
-                border: "1px solid rgba(255,200,50,0.25)",
-                borderRadius: 6,
-                marginBottom: 16,
-                fontSize: 12,
-                color: "#FFD166",
-              }}
-            >
-              🧪 Test — card: <strong>4242 4242 4242 4242</strong>, any
-              expiry/CVC
-            </div>
-            {error && (
-              <div
-                style={{
-                  background: "rgba(200,50,50,0.12)",
-                  border: "1px solid rgba(200,50,50,0.4)",
-                  borderRadius: 6,
-                  padding: "10px 14px",
-                  marginBottom: 14,
-                  fontSize: 13,
-                  color: "#FF6B6B",
-                }}
-              >
-                {error}
-              </div>
-            )}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 14,
-                marginBottom: 20,
-              }}
-            >
-              <div>
-                <label
-                  style={{
-                    fontSize: 12,
-                    color: C.midGray,
-                    display: "block",
-                    marginBottom: 6,
-                  }}
-                >
-                  Cardholder Name
-                </label>
-                <input
-                  placeholder="Ahmed Khan"
-                  value={card.name}
-                  onChange={(e) =>
-                    setCard((c) => ({ ...c, name: e.target.value }))
-                  }
-                />
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontSize: 12,
-                    color: C.midGray,
-                    display: "block",
-                    marginBottom: 6,
-                  }}
-                >
-                  Card Number
-                </label>
-                <input
-                  placeholder="4242 4242 4242 4242"
-                  value={card.number}
-                  onChange={(e) =>
-                    setCard((c) => ({ ...c, number: fmtCard(e.target.value) }))
-                  }
-                  maxLength={19}
-                />
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
-                }}
-              >
-                <div>
-                  <label
-                    style={{
-                      fontSize: 12,
-                      color: C.midGray,
-                      display: "block",
-                      marginBottom: 6,
-                    }}
-                  >
-                    Expiry
-                  </label>
-                  <input
-                    placeholder="12/27"
-                    value={card.expiry}
-                    onChange={(e) =>
-                      setCard((c) => ({ ...c, expiry: fmtExp(e.target.value) }))
-                    }
-                    maxLength={5}
-                  />
-                </div>
-                <div>
-                  <label
-                    style={{
-                      fontSize: 12,
-                      color: C.midGray,
-                      display: "block",
-                      marginBottom: 6,
-                    }}
-                  >
-                    CVC
-                  </label>
-                  <input
-                    placeholder="123"
-                    value={card.cvc}
-                    onChange={(e) =>
-                      setCard((c) => ({
-                        ...c,
-                        cvc: e.target.value.replace(/\D/g, "").slice(0, 3),
-                      }))
-                    }
-                    maxLength={3}
-                  />
-                </div>
-              </div>
-            </div>
-            <button
-              className="btn-primary"
-              style={{ width: "100%", justifyContent: "center", padding: 15 }}
-              onClick={pay}
-              disabled={processing}
-            >
-              {processing ? "Processing..." : `🔒 Pay ${plans[plan].price}`}
-            </button>
-          </>
-        )}
-        {step === "success" && (
-          <div style={{ textAlign: "center", padding: "20px 0" }}>
-            <div
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: "50%",
-                background: "rgba(50,180,50,0.15)",
-                border: "2px solid #5CCC5C",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                margin: "0 auto 20px",
-                fontSize: 32,
-              }}
-            >
-              ✓
-            </div>
-            <h2
-              style={{
-                fontFamily: "'Playfair Display',serif",
-                fontSize: 26,
-                marginBottom: 10,
-              }}
-            >
-              Welcome to Pro!
-            </h2>
-            <p
-              style={{
-                color: C.midGray,
-                fontSize: 14,
-                lineHeight: 1.7,
-                marginBottom: 28,
-              }}
-            >
-              Your Pro subscription is active. Enjoy unlimited itineraries!
-            </p>
-            <button
-              className="btn-primary"
-              style={{ width: "100%", justifyContent: "center", padding: 14 }}
-              onClick={onClose}
-            >
-              Start Planning Unlimited Trips
-            </button>
+          ))}
+        </div>
+        
+        {error && (
+          <div
+            style={{
+              background: "rgba(200,50,50,0.12)",
+              border: `1px solid ${C.crimson}`,
+              borderRadius: 6,
+              padding: "10px 14px",
+              marginBottom: 16,
+              fontSize: 13,
+              color: "#FF6B6B",
+            }}
+          >
+            {error}
           </div>
         )}
+        
+        <button
+          className="btn-primary"
+          style={{
+            width: "100%",
+            justifyContent: "center",
+            padding: 14,
+            marginTop: 8,
+          }}
+          onClick={handleUpgrade}
+          disabled={processing}
+        >
+          {processing ? "Processing..." : "⭐ Proceed to Checkout"}
+        </button>
+        
+        <p
+          style={{
+            textAlign: "center",
+            color: C.midGray,
+            fontSize: 11,
+            marginTop: 12,
+          }}
+        >
+          🔒 Test mode — use card 4242 4242 4242 4242
+        </p>
       </div>
     </div>
   );

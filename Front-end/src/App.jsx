@@ -24,8 +24,10 @@ import ItineraryView from "./pages/ItineraryView";
 import SupportPage from "./pages/SupportPage";
 import AdminPanel from "./admin/AdminPanel";
 import BlogDetailPage from "./pages/BlogDetailPage";
-import ForgotPasswordPage from "./components/auth/ForgotPasswordPage";  // NEW
-import ResetPasswordPage from "./components/auth/ResetPasswordPage";    // NEW
+import ForgotPasswordPage from "./components/auth/ForgotPasswordPage";
+import ResetPasswordPage from "./components/auth/ResetPasswordPage";
+import PaymentSuccess from "./pages/PaymentSuccess";  // NEW
+import PaymentCancel from "./pages/PaymentCancel";    // NEW
 
 function RequireAuth({ user, children }) {
   const location = useLocation();
@@ -261,7 +263,7 @@ function AppInner() {
             element={<BlogDetailPage onBack={() => navigate(-1)} />}
           />
 
-          {/* NEW: Forgot Password Route */}
+          {/* Password Reset Routes */}
           <Route
             path="/forgot-password"
             element={
@@ -269,13 +271,16 @@ function AppInner() {
             }
           />
 
-          {/* NEW: Reset Password Route */}
           <Route
             path="/reset-password/:token"
             element={
               <ResetPasswordPage onBack={() => navigate("/login")} />
             }
           />
+
+          {/* Stripe Payment Routes (NEW - Round 8) */}
+          <Route path="/payment/success" element={<PaymentSuccess />} />
+          <Route path="/payment/cancel" element={<PaymentCancel />} />
 
           <Route
             path="/login"

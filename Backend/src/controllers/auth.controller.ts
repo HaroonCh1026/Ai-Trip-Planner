@@ -282,11 +282,24 @@ export const getMe = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const user = await User.findById(req.user!.id);
+    // Include planExpires field when fetching user
+    const user = await User.findById(req.user!.id).select('+planExpires');
+    
     if (!user) {
       sendError(res, "User not found.", 404);
       return;
     }
+
+    // ─── Pro Expiry Lazy Check (Round 8) ──────────────────────────────────
+    // If user is 'pro' but planExpires is in the past, downgrade to 'free'
+    if (user.plan === 'pro' && user.planExpires && user.planExpires < new Date()) {
+      user.plan = 'free';
+      user.planExpires = null;
+      await user.save();
+      console.log(`[auth] Downgraded expired pro user: ${user.email}`);
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     sendSuccess(res, { user: buildUserPayload(user) });
   } catch (err) {
     next(err);
