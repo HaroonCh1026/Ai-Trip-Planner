@@ -28,6 +28,7 @@ import ForgotPasswordPage from "./components/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./components/auth/ResetPasswordPage";
 import PaymentSuccess from "./pages/PaymentSuccess";  // NEW
 import PaymentCancel from "./pages/PaymentCancel";    // NEW
+import BookingConfirmation from "./pages/BookingConfirmation"; // Day 4
 
 function RequireAuth({ user, children }) {
   const location = useLocation();
@@ -281,6 +282,9 @@ function AppInner() {
           {/* Stripe Payment Routes (NEW - Round 8) */}
           <Route path="/payment/success" element={<PaymentSuccess />} />
           <Route path="/payment/cancel" element={<PaymentCancel />} />
+
+          {/* Day 4: trip booking confirmation receipt page */}
+          <Route path="/booking/:id/confirmed" element={<BookingConfirmation />} />
 
           <Route
             path="/login"

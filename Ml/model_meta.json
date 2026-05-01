@@ -1,0 +1,88 @@
+{
+  "trained_at": "2026-04-29T20:28:59.840445+00:00",
+  "dataset_rows": 5000,
+  "train_rows": 4000,
+  "test_rows": 1000,
+  "winning_model": "Gradient Boosting",
+  "metrics": {
+    "mae": 27092.17612406819,
+    "rmse": 43955.088342650844,
+    "r2": 0.9576415795918509
+  },
+  "all_metrics": {
+    "Linear Regression": {
+      "mae": 77174.99382237988,
+      "rmse": 106642.26754353868,
+      "r2": 0.7506667581467069
+    },
+    "Random Forest": {
+      "mae": 29944.199109999998,
+      "rmse": 47305.81644425313,
+      "r2": 0.9509374036988025
+    },
+    "Gradient Boosting": {
+      "mae": 27092.17612406819,
+      "rmse": 43955.088342650844,
+      "r2": 0.9576415795918509
+    }
+  },
+  "numeric_features": [
+    "Distance (km)",
+    "Duration (days)",
+    "Traveler age",
+    "Group size"
+  ],
+  "categorical_features": [
+    "Region",
+    "Traveler gender",
+    "Traveler nationality",
+    "Trip type",
+    "Accommodation type",
+    "Transportation type",
+    "Season"
+  ],
+  "category_values": {
+    "Region": [
+      "AJK",
+      "Balochistan",
+      "Gilgit-Baltistan",
+      "KPK",
+      "Punjab",
+      "Sindh"
+    ],
+    "Traveler gender": [
+      "Female",
+      "Male"
+    ],
+    "Traveler nationality": [
+      "Foreign",
+      "Pakistani"
+    ],
+    "Trip type": [
+      "Adventure",
+      "Business",
+      "Family",
+      "Leisure"
+    ],
+    "Accommodation type": [
+      "Budget",
+      "Luxury",
+      "Mid"
+    ],
+    "Transportation type": [
+      "Flight",
+      "Road (Car (SUV))",
+      "Road (Car (Small))",
+      "Road (Coaster)",
+      "Road (Hiace)"
+    ],
+    "Season": [
+      "Autumn",
+      "Spring",
+      "Summer",
+      "Winter"
+    ]
+  },
+  "target": "Total cost",
+  "currency": "PKR"
+}

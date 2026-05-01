@@ -8,6 +8,7 @@ import TripProgress from "../components/trip/TripProgress";
 import ChatList from "../components/trip/ChatList";
 import ChatInput from "../components/trip/ChatInput";
 import ReviewSummary from "../components/trip/ReviewSummary";
+import VehicleSelectStep from "../components/trip/VehicleSelectStep";
 import { Icon } from "../components/Icon";
 
 const FREE_LIMIT = 5;
@@ -93,6 +94,17 @@ export default function TripCreator({ user, onBack, onComplete }) {
       currency: aiData.currency || "Pakistani Rupee (PKR)",
       language: aiData.language || "Urdu/English",
       emergencyNumbers: aiData.emergencyNumbers || "15 (Police), 1122 (Medical)",
+      // Day 2: ML cost prediction snapshot (optional — present only if the
+      // Python ML service was online when generation ran). The backend
+      // attaches this in ai.controller.ts after Gemini returns. We pass it
+      // through here so it ends up on the saved Trip document and the
+      // itinerary view can render the cost validation panel.
+      mlPrediction: aiData.mlPrediction || null,
+      // Day 3: feasibility report (optional — present only if validator
+      // found timing/distance issues). Kept on the trip so subsequent
+      // visits to the itinerary view re-render the warnings without
+      // re-running the validator.
+      feasibility: aiData.feasibility || null,
     };
   };
 
@@ -174,6 +186,61 @@ export default function TripCreator({ user, onBack, onComplete }) {
     }
   };
 
+  // ── Special-step submit (Day 3): vehicle picker ──────────────────────────
+  // Special chatbot questions (currently just the vehicle picker) render
+  // their own UI inline in ChatList instead of using the text input bar.
+  // When the user clicks the step's Continue button, this handler fires —
+  // it stores BOTH `vehicleId` and `groupSize` in the answers map and
+  // advances to the next question, mirroring handleSend's flow.
+  const handleSpecialSubmit = async (payload) => {
+    if (phase !== "chat") return;
+    const q = CHATBOT_QUESTIONS[currentQ];
+    if (!q || q.type !== "special") return;
+
+    // Merge the multi-field payload into answers. The `vehicle` slot itself
+    // gets a human-readable summary so the review screen can show it nicely.
+    const newAnswers = {
+      ...answers,
+      vehicleId: payload.vehicleId,
+      groupSize: payload.groupSize,
+      // Slot for ReviewSummary's display logic — ID-to-label mapping kept in
+      // the constants module. We resolve it lazily here to avoid yet another
+      // import in the review component.
+      vehicle: payload.vehicleId,
+    };
+    setAnswers(newAnswers);
+
+    // Add a synthetic user-bubble in the chat so the conversation reads
+    // naturally ("you said: Hiace Van for a family of 4").
+    const groupLabel =
+      payload.groupSize === 1
+        ? "Just me"
+        : payload.groupSize === 2
+        ? "2 people"
+        : `${payload.groupSize}+ people`;
+    setMessages((m) => [
+      ...m,
+      { from: "user", text: `Vehicle: ${payload.vehicleId} · ${groupLabel}` },
+    ]);
+
+    if (currentQ < CHATBOT_QUESTIONS.length - 1) {
+      await new Promise((r) => setTimeout(r, 400));
+      const next = CHATBOT_QUESTIONS[currentQ + 1];
+      setMessages((m) => [...m, { from: "bot", text: next.question }]);
+      setCurrentQ((c) => c + 1);
+    } else {
+      await new Promise((r) => setTimeout(r, 400));
+      setMessages((m) => [
+        ...m,
+        {
+          from: "bot",
+          text: "Got it! Take a moment to review your trip details — you can edit anything before we generate your itinerary.",
+        },
+      ]);
+      setPhase("review");
+    }
+  };
+
   // ── Step back: pop the last Q/A pair and re-ask the previous question ──
   // The chat state has: [intro, Q0, A0, Q1, A1, Q2, ...]. After the user
   // has answered Q0 and we've shown Q1, popping back means removing A0 and Q1
@@ -186,16 +253,28 @@ export default function TripCreator({ user, onBack, onComplete }) {
     // We always added them in pairs after Q0, so popping 2 messages is correct.
     setMessages((m) => m.slice(0, -2));
 
-    // Clear the previous answer so the user can edit it from scratch
+    // Clear the previous answer so the user can edit it from scratch.
+    // Special steps store multiple fields under different keys — for the
+    // vehicle step that's vehicleId + groupSize + vehicle (the display alias).
     setAnswers((a) => {
       const copy = { ...a };
-      delete copy[prevQ.id];
+      if (prevQ.type === "special" && prevQ.id === "vehicle") {
+        delete copy.vehicleId;
+        delete copy.groupSize;
+        delete copy.vehicle;
+      } else {
+        delete copy[prevQ.id];
+      }
       return copy;
     });
 
     // Restore the input to whatever the user had typed before, so they can
-    // tweak it instead of retyping from zero
-    setInput(answers[prevQ.id] || "");
+    // tweak it instead of retyping from zero (only relevant for text steps)
+    if (prevQ.type !== "special") {
+      setInput(answers[prevQ.id] || "");
+    } else {
+      setInput("");
+    }
 
     setCurrentQ((c) => c - 1);
     setError(null);
@@ -267,6 +346,14 @@ export default function TripCreator({ user, onBack, onComplete }) {
         currency: transformedData.currency,
         language: transformedData.language,
         emergencyNumbers: transformedData.emergencyNumbers,
+        // Day 2: persist ML prediction onto the trip (or null if ML was offline)
+        ...(transformedData.mlPrediction
+          ? { mlPrediction: transformedData.mlPrediction }
+          : {}),
+        // Day 3: persist feasibility report onto the trip (or omit if no issues)
+        ...(transformedData.feasibility
+          ? { feasibility: transformedData.feasibility }
+          : {}),
         status: "upcoming",
       };
 
@@ -326,6 +413,18 @@ export default function TripCreator({ user, onBack, onComplete }) {
           genStep={genStep}
           genSteps={genSteps}
         />
+
+        {/* Day 3: special chatbot steps render their dedicated UI inline.
+            Currently just the vehicle picker. Sits between chat history and
+            either the review screen or the input bar at the bottom. */}
+        {phase === "chat" &&
+          CHATBOT_QUESTIONS[currentQ]?.type === "special" &&
+          CHATBOT_QUESTIONS[currentQ]?.id === "vehicle" && (
+            <VehicleSelectStep
+              defaultGroupSize={Number(answers.groupSize) || 2}
+              onSubmit={handleSpecialSubmit}
+            />
+          )}
 
         {/* Review screen — appears between chat history and input area */}
         {phase === "review" && (

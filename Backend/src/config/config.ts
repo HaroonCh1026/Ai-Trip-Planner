@@ -67,6 +67,28 @@ const config = {
     cancelUrl: process.env.STRIPE_CANCEL_URL || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/payment/cancel`,
   },
 
+  // ─── ML cost-prediction service (Day 1) ─────────────────────────────────
+  // The Python Flask service that exposes the trained model. Run separately:
+  //     cd ML && python service.py
+  // baseUrl is intentionally optional — if the ML service isn't running, the
+  // Node backend silently skips ML enrichment and falls back to Gemini-only
+  // estimates. This keeps the backend bootable even when Python isn't set up.
+  ml: {
+    baseUrl: process.env.ML_BASE_URL || 'http://127.0.0.1:5001',
+  },
+
+  // ─── Geoapify Routing & Places (Day 3) ───────────────────────────────────
+  // Free tier: 3000 credits/day, no credit card required, allowed to cache
+  // responses indefinitely. We use Geoapify primarily for inter-city distance
+  // & drive-time lookups (routingService.ts) and will use it for verified
+  // place data on Day 4.
+  //
+  // If apiKey is empty, the routing service silently falls back to its
+  // curated 30-route matrix + dataset estimates. Backend still boots.
+  geoapify: {
+    apiKey: process.env.GEOAPIFY_API_KEY || '',
+  },
+
   adminEmail: (process.env.ADMIN_EMAIL || 'admin@voyageur.pk').toLowerCase(),
 
   allowedOrigins: (

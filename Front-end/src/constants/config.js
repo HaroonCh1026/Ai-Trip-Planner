@@ -33,6 +33,11 @@ export async function generateItineraryWithAI(tripData) {
       startDate:   tripData.startDate,
       budget:      parseInt(tripData.budget),
       preferences: tripData.preferences || 'Architecture, Culture, Logistics',
+      // Day 3: optional fields from the new vehicle-selection step.
+      // Only forwarded if the user picked one in the trip flow — backend
+      // gracefully falls back to defaults if missing.
+      ...(tripData.vehicleId ? { vehicleId: tripData.vehicleId } : {}),
+      ...(tripData.groupSize ? { groupSize: parseInt(tripData.groupSize) } : {}),
     }),
   });
 

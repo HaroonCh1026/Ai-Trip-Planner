@@ -6,27 +6,139 @@ import { TripGenerationInput, GeminiItineraryResponse } from '../types';
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 
 // ─── Build the exact same prompt used in frontend config.js ───────────────
-const buildPrompt = (input: TripGenerationInput): string => {
+import { buildTravelConstraintsPrompt } from '../utils/feasibilityValidator';
+import { getVehicle, computeTransportCost } from '../utils/vehicleOptions';
+import { getRoute } from './routingService';
+
+const buildPrompt = async (input: TripGenerationInput): Promise<string> => {
   const days = Number(input.days);
   const budget = Number(input.budget);
   const preferences = input.preferences || 'Architecture, Culture, Logistics';
+  const groupSize = Math.max(1, Number(input.groupSize) || 1);
+
+  // ── Day 3: build the travel-constraints block ─────────────────────────
+  // Looks up real distance & drive time for this origin→destination pair
+  // and tells Gemini what's realistic. If neither Geoapify nor curated nor
+  // dataset has data, this returns null and we silently skip the constraint
+  // injection (Gemini falls back to its own knowledge).
+  let constraintsBlock = '';
+  try {
+    const constraints = await buildTravelConstraintsPrompt(input.origin, input.destination);
+    if (constraints) {
+      constraintsBlock = `\n${constraints}\n`;
+    }
+  } catch {
+    // Routing service failure is never fatal — drop the constraints block silently.
+  }
+
+  // ── Day 4 fix: build the vehicle/transport context block ────────────
+  // The prompt now does THREE things differently:
+  //   1. Vehicle choice changes ACTIVITIES, not just the price tag.
+  //      Private vehicles unlock scenic detours; public transport keeps
+  //      itineraries city-to-city; flights compress travel into a single
+  //      block leaving more time at the destination.
+  //   2. If no vehicleId is supplied, we still inject a sensible default
+  //      ("intercity bus / shared van") so Gemini gets consistent guidance.
+  //   3. The transport cost is computed and fed in, with explicit instruction
+  //      to use exactly that number — Gemini was previously free to invent
+  //      its own.
+  let vehicleBlock = '';
+  let vehicleStyleGuidance = '';
+  const vehicle = input.vehicleId ? getVehicle(input.vehicleId) : undefined;
+  const route = await getRoute(input.origin, input.destination).catch(() => null);
+  const distance = route?.kmRoad ?? 500;
+
+  if (vehicle) {
+    const roundTripCost = computeTransportCost({
+      vehicle,
+      distanceKm: distance * 2,
+      groupSize,
+      routeKey: `${input.origin}-${input.destination}`.toLowerCase(),
+    });
+
+    // Vehicle-class style rules — these change the SHAPE of the itinerary,
+    // not just the cost. Categorized into 4 patterns and selected by id.
+    const id = vehicle.id;
+    if (id === 'flight_economy') {
+      vehicleStyleGuidance =
+        'TRAVEL PATTERN: Treat the journey to the destination as a single ' +
+        'block (transit to airport, flight, transit from airport). Spend the ' +
+        'rest of Day 1 acclimatizing at the destination. Do NOT plan stops ' +
+        'between origin and destination — flights are point-to-point. Maximize ' +
+        'time AT the destination across the remaining days.';
+    } else if (id.includes('private') || id === 'suv_private') {
+      vehicleStyleGuidance =
+        'TRAVEL PATTERN: User has a private vehicle with driver, so the trip ' +
+        'is FLEXIBLE. Include 1–2 scenic stops along the route (viewpoints, ' +
+        'roadside dhaba lunches, brief sightseeing detours). The vehicle waits ' +
+        'between stops — leverage this. Day 1 should feel like a road trip, ' +
+        'not a transit. Off-route attractions are accessible.';
+    } else if (id.includes('shared') || id.startsWith('daewoo')) {
+      vehicleStyleGuidance =
+        'TRAVEL PATTERN: User is on shared/public transport, so route is ' +
+        'FIXED city-to-city with NO scenic detours. Schedule travel as a ' +
+        'single morning or afternoon block ending at the destination. Do NOT ' +
+        'plan roadside stops or detours — the bus does not stop for tourists. ' +
+        'Activities begin only AFTER arrival at the destination.';
+    } else if (id === 'coaster_private') {
+      vehicleStyleGuidance =
+        'TRAVEL PATTERN: Group has a private coaster, so the itinerary is ' +
+        'FLEXIBLE but logistics-heavy (more loading time, longer rest stops). ' +
+        'Activities must accommodate a larger group — pick group-friendly ' +
+        'venues. One or two scenic stops are appropriate but not many.';
+    }
+
+    vehicleBlock =
+      `\nTraveler's chosen transport: ${vehicle.label} — ${vehicle.description}\n` +
+      `Capacity ${vehicle.capacity} ${vehicle.capacity === 1 ? 'person' : 'people'}, ` +
+      `${vehicle.isShared ? 'shared/per-person' : 'private/per-vehicle'} pricing. ` +
+      `Group size: ${groupSize}.\n` +
+      `Round-trip transport cost: PKR ${roundTripCost.toLocaleString()} — ` +
+      `use EXACTLY this number for the transport line-item; do not estimate your own.\n` +
+      `${vehicleStyleGuidance}\n`;
+  } else {
+    // No vehicleId provided — assume intercity shared van (Pakistan default)
+    // and tell Gemini to plan accordingly. Better than letting it invent.
+    vehicleBlock =
+      `\nTraveler did not specify transport. Assume shared intercity bus/van ` +
+      `(Daewoo / Faisal Movers / Hiace shared) for the journey. Plan as a ` +
+      `direct city-to-city transit, no scenic detours. Group size: ${groupSize}.\n`;
+  }
+
+  // ── Day 4 fix: hard budget enforcement instructions ──────────────────
+  // The OLD prompt said "Budget: PKR X allocated for mid-range to premium
+  // experiences" — Gemini interpreted this as a soft suggestion and routinely
+  // produced trips 2-3x over budget. The new wording is explicit:
+  //   - "DO NOT exceed PKR X in total"
+  //   - Provides a target distribution so Gemini doesn't over-allocate to
+  //     one category
+  //   - Tells Gemini what to do if budget is tight (downgrade accommodations,
+  //     trim activities) rather than just blowing past the limit
+  const budgetGuidance =
+    `\nBUDGET CONSTRAINT (HARD LIMIT): Total trip cost MUST NOT exceed PKR ${budget.toLocaleString()}. ` +
+    `Sum of all daily costs + transport must stay under this number.\n` +
+    `Target distribution: ~30% accommodation, ~25% transport, ~25% food, ~20% activities.\n` +
+    `If the budget feels tight for the requested duration/destination, prioritize: ` +
+    `(1) downgrade accommodation tier (Mid → Budget), ` +
+    `(2) reduce paid activities and lean on free/low-cost ones (parks, viewpoints, mosques, bazaars), ` +
+    `(3) suggest local eateries instead of premium restaurants. ` +
+    `Do NOT silently exceed budget — adjust the plan to fit.\n`;
 
   return `You are a high-level strategic travel architect specializing in the Pakistani landscape. Generate a comprehensive ${days}-day logistical itinerary from ${input.origin} to ${input.destination}.
 All financial figures MUST be strictly in PKR (Pakistani Rupee).
-
+${constraintsBlock}${vehicleBlock}${budgetGuidance}
 Travel Context for Pakistan:
 - Local transport: HIACE/Coasters for Gilgit-Skardu, Daewoo/Faisal Movers for M-Tag highways, Indriver/Bykea for metro areas.
 - Connectivity: Mention SCOM for Northern Areas, Zong/Jazz for metros.
 - Culinary: Recommend authentic regional dishes (e.g., Chapshuro in Hunza, Saag in Punjab, Sajji in Balochistan).
 - Security: Mention M-Tag requirements, motorway protocols, and high-altitude safety.
-- Budget: PKR ${budget} allocated for mid-range to premium experiences (Serena/PC/LUXUS).
 
 Travel Parameters:
 - Point of Departure: ${input.origin}
 - Target Destination: ${input.destination}
 - Logistical Duration: ${days} days
 - Initiation Date: ${input.startDate}
-- Strategic Budget: PKR ${budget}
+- Strategic Budget: PKR ${budget.toLocaleString()} (HARD LIMIT — see budget constraint above)
 - User Preferences: ${preferences}
 
 IMPORTANT: Return ONLY raw JSON. No markdown. No backticks. No explanation. Start your response with { and end with }. Schema:
@@ -107,7 +219,11 @@ export const generateTripItinerary = async (
   const AI_TIMEOUT_MS = 45_000;
   let raw: string;
   try {
-    const generation = model.generateContent(buildPrompt(input));
+    // buildPrompt is now async because it does route lookups (Geoapify/cache/dataset).
+    // We build the prompt before starting the timeout race so the 45s window
+    // is purely for the Gemini call itself, not our local I/O.
+    const prompt = await buildPrompt(input);
+    const generation = model.generateContent(prompt);
     const timeout = new Promise<never>((_, reject) =>
       setTimeout(
         () => reject(new Error(`Gemini API call timed out after ${AI_TIMEOUT_MS / 1000}s`)),

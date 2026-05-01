@@ -60,6 +60,39 @@ const refinementSchema = new Schema(
   { _id: true } // give each refinement its own _id so future rollback can reference it
 );
 
+// ─── ML cost prediction sub-schema (Day 2) ─────────────────────────────────
+// Snapshot of what the trained Pakistan-travel cost model predicted for this
+// trip at the moment Gemini generated it. We store it on the trip itself so
+// that:
+//   1. The itinerary view can render "based on similar trips" without re-
+//      hitting the Python service every page load
+//   2. The admin analytics tab can compare AI estimates vs ML predictions
+//      vs actual booking values across all historical trips
+//   3. We have a permanent record even if the model is later retrained or
+//      the ML service goes offline
+//
+// Fields are optional — if the ML service was down at generation time, this
+// whole subdocument is simply absent and the UI falls back to AI estimate
+// only.
+const mlPredictionSchema = new Schema(
+  {
+    predictedCostPKR: { type: Number, required: true },   // model's point estimate
+    lowPKR: { type: Number, required: true },             // predictedCost - rmse
+    highPKR: { type: Number, required: true },            // predictedCost + rmse
+    rmsePKR: { type: Number, default: 0 },                // model's test-set RMSE
+    aiEstimatePKR: { type: Number, default: 0 },          // what Gemini claimed
+    deltaPercent: { type: Number, default: 0 },           // (ai - predicted) / predicted * 100
+    withinRange: { type: Boolean, default: true },        // is AI estimate within [low, high]?
+    confidenceLabel: {                                    // human-readable verdict
+      type: String,
+      enum: ['accurate', 'slightly_off', 'unrealistic'],
+      default: 'accurate',
+    },
+    predictedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 // ─── Trip schema ───────────────────────────────────────────────────────────
 const tripSchema = new Schema<ITrip>(
   {
@@ -100,6 +133,19 @@ const tripSchema = new Schema<ITrip>(
     // active itinerary lives in `itinerary` above (we replace it on each
     // refinement). This array is the audit trail — most recent last.
     refinements: { type: [refinementSchema], default: [] },
+
+    // ── ML cost prediction snapshot (Day 2) ────────────────────────────────
+    // Set when Gemini generates the trip. Optional — if ML service was offline
+    // at generation time, this is simply absent.
+    mlPrediction: { type: mlPredictionSchema, default: undefined },
+
+    // ── Feasibility report (Day 3) ─────────────────────────────────────────
+    // Set when the post-Gemini validator caught one or more timing/distance
+    // issues with the AI-generated itinerary. Stored as Mixed because the
+    // shape may evolve as we add new validator types and we don't want
+    // Mongoose strictness to reject legitimate fields. Optional — most trips
+    // pass validation cleanly and this field is absent.
+    feasibility: { type: Schema.Types.Mixed, default: undefined },
   },
   {
     timestamps: true,

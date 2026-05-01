@@ -348,6 +348,15 @@ export const CHATBOT_QUESTIONS = [
     type: "number",
   },
   {
+    // Day 3: special question that renders VehicleSelectStep instead of a
+    // text input. Sets BOTH `vehicleId` and `groupSize` in the answers map
+    // when the user submits — TripCreator handles the dual write.
+    id: "vehicle",
+    label: "Group & transport",
+    question: "Who's traveling, and how would you like to get there?",
+    type: "special",
+  },
+  {
     id: "preferences",
     label: "Your interests",
     question: "What are you most interested in? Food, nature, history, shopping, anything else.",

@@ -1,0 +1,12 @@
+# VoyageurAI ML cost-prediction service dependencies.
+# Install with: pip install -r requirements.txt
+#
+# Versions chosen for compatibility with Python 3.8 - 3.13.
+# scikit-learn 1.3+ supports the OneHotEncoder(handle_unknown='ignore')
+# behavior we rely on. pandas 2.x is fine; 3.x works too.
+
+flask>=3.0.0
+joblib>=1.3.0
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0

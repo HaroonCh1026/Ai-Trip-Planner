@@ -26,6 +26,115 @@ export const createBooking = async (
   }
 };
 
+// ─── POST /api/bookings/trip — Day 4: Trip booking simulation ─────────────
+// Books the user's saved trip with a transparent 8% service fee added on top.
+// This is a SIMULATED booking (no real money changes hands, no real partner
+// API calls). It exists to demonstrate the platform's revenue model: every
+// booking generates `serviceFee` revenue for the company.
+//
+// The fee percentage is currently hard-coded at 8% but will be admin-editable
+// from the AdminConfig collection in Day 5. Storing serviceFee on each
+// booking row (rather than re-computing) means historical revenue stays
+// accurate even if the admin later changes the fee percentage.
+//
+// On success, returns the saved Booking document. The frontend uses
+// the booking._id to route to /booking/:id/confirmed.
+const TRIP_SERVICE_FEE_PERCENT = 8;
+
+export const bookTrip = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { tripId } = req.body;
+    const userId = req.user!.id;
+
+    if (!tripId) {
+      sendError(res, 'tripId is required.', 400);
+      return;
+    }
+
+    const trip = await Trip.findOne({ _id: tripId, userId });
+    if (!trip) {
+      sendError(res, 'Trip not found.', 404);
+      return;
+    }
+
+    // Use the trip's totalCost as the base. If it's 0/missing (shouldn't
+    // happen but defensive), fall back to the user's budget.
+    const baseAmount = Number(trip.totalCost) > 0 ? Number(trip.totalCost) : Number(trip.budget) || 0;
+    if (baseAmount <= 0) {
+      sendError(res, 'This trip has no cost set; cannot create booking.', 400);
+      return;
+    }
+
+    const serviceFee = Math.round(baseAmount * (TRIP_SERVICE_FEE_PERCENT / 100));
+    const finalAmount = baseAmount + serviceFee;
+
+    // Snapshot the trip's headline fields so the booking confirmation page
+    // doesn't depend on the Trip document still existing.
+    const tripSnapshot = {
+      destination: trip.destination,
+      origin: trip.origin,
+      days: trip.days,
+      startDate: trip.startDate,
+      dates: trip.dates,
+      image: trip.image,
+      totalCost: trip.totalCost,
+    };
+
+    const booking = await Booking.create({
+      userId,
+      tripId,
+      amount: finalAmount,             // backward-compat: amount = total
+      status: 'Paid',                  // simulated: instantly "paid"
+      bookingType: 'trip',
+      baseAmount,
+      serviceFee,
+      finalAmount,
+      tripSnapshot,
+      // Optional fields if the trip captured them:
+      vehicleId: undefined,            // populated when we wire vehicle to trip persistence
+      groupSize: undefined,
+    });
+
+    sendSuccess(
+      res,
+      {
+        booking,
+        servicefeePercent: TRIP_SERVICE_FEE_PERCENT,
+      },
+      'Trip booked successfully',
+      201
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── GET /api/bookings/:id — Day 4: fetch single booking for confirmation ──
+// The frontend hits this on /booking/:id/confirmed to render a receipt.
+// Scoped to the requesting user — no booking sharing across users.
+export const getBookingById = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const { id } = req.params;
+    const booking = await Booking.findOne({ _id: id, userId });
+    if (!booking) {
+      sendError(res, 'Booking not found.', 404);
+      return;
+    }
+    sendSuccess(res, { booking });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ─── GET /api/bookings ─────────────────────────────────────────────────────
 export const getUserBookings = async (
   req: AuthRequest,

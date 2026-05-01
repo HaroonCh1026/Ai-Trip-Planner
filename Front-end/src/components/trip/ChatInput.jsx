@@ -17,6 +17,11 @@ export default function ChatInput({
   if (currentQ >= CHATBOT_QUESTIONS.length) return null;
 
   const currentQuestion = CHATBOT_QUESTIONS[currentQ];
+  // Day 3: special-type questions (e.g. vehicle picker) render their own
+  // inline component instead of using this text input. Hide the input bar
+  // for those — otherwise users would see two competing UIs at once.
+  if (currentQuestion?.type === "special") return null;
+
   const isCityField = currentQuestion?.id === "origin" || currentQuestion?.id === "destination";
 
   // Show a budget hint inline when the user has typed something in the
