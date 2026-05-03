@@ -18,6 +18,9 @@ import AdminBookings from "./bookings/AdminBookings";
 import AdminSupport from "./support/AdminSupport";
 import AdminBlogs from "./blogs/AdminBlogs";
 import AdminLogs from "./logs/AdminLogs";
+import AdminPricing from "./pricing/AdminPricing";
+import AdminRevenue from "./revenue/AdminRevenue";
+import AdminMLAnalytics from "./ml-analytics/AdminMLAnalytics";
 
 const VALID_TABS = [
   "dashboard",
@@ -27,6 +30,9 @@ const VALID_TABS = [
   "support",
   "blogs",
   "logs",
+  "pricing",
+  "revenue",
+  "ml-analytics",
 ];
 
 export default function AdminPanel({
@@ -168,6 +174,9 @@ export default function AdminPanel({
               element={<AdminBlogs blogs={blogs} setBlogs={setBlogs} />}
             />
             <Route path="logs" element={<AdminLogs />} />
+            <Route path="pricing" element={<AdminPricing />} />
+            <Route path="revenue" element={<AdminRevenue />} />
+            <Route path="ml-analytics" element={<AdminMLAnalytics />} />
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Routes>
         </div>

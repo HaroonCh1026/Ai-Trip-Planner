@@ -6,6 +6,11 @@ import AdminLog from '../models/AdminLog';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types';
 import { logAdminAction } from '../services/adminLog.service';
+import {
+  getRawAdminConfigDoc,
+  getEffectiveConfig,
+  updateAdminConfig,
+} from '../services/adminConfig.service';
 
 // ─── GET /api/admin/stats ──────────────────────────────────────────────────
 export const getStats = async (_req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -202,4 +207,116 @@ export const getAdminLogs = async (req: AuthRequest, res: Response, next: NextFu
 
     sendSuccess(res, { logs: formatted, count: formatted.length });
   } catch (err) { next(err); }
+};
+
+// ─── GET /api/admin/config ─────────────────────────────────────────────────
+// Day 5A: returns the current operational config (service fee %, fuel price,
+// vehicle/route overrides, free trip limit). Admin uses this to populate
+// the pricing controls form.
+//
+// Returns BOTH the raw stored document (so admin sees what's actually saved)
+// AND the effective merged config (which fills in defaults for unset fields).
+// This way the form can pre-fill with effective values while the admin can
+// still tell which fields were explicitly customised vs using defaults.
+export const getConfig = async (
+  _req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const [raw, effective] = await Promise.all([
+      getRawAdminConfigDoc(),
+      getEffectiveConfig(),
+    ]);
+    sendSuccess(res, {
+      raw, // null on first load before any save
+      effective,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── PATCH /api/admin/config ───────────────────────────────────────────────
+// Day 5A: admin updates one or more pricing parameters. Partial update —
+// any field omitted from the body is left unchanged.
+//
+// Validation:
+//   - tripServiceFeePercent must be 0-50
+//   - freeTripLimit must be 0-100
+//   - fuelPricePerLiterPKR must be > 0
+//   - vehicleOverridesPKR / flightRouteOverridesPKR must be plain {string: number} maps
+//
+// On success, invalidates the in-memory config cache so the next AI/booking
+// request picks up the new values within milliseconds. Logs the change to
+// AdminLog so we have an audit trail of pricing changes.
+export const updateConfig = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const body = req.body as {
+      tripServiceFeePercent?: number;
+      freeTripLimit?: number;
+      fuelPricePerLiterPKR?: number;
+      vehicleOverridesPKR?: Record<string, number>;
+      flightRouteOverridesPKR?: Record<string, number>;
+    };
+
+    // ── Validate ──────────────────────────────────────────────────────────
+    if (body.tripServiceFeePercent !== undefined) {
+      const n = Number(body.tripServiceFeePercent);
+      if (!Number.isFinite(n) || n < 0 || n > 50) {
+        sendError(res, 'tripServiceFeePercent must be a number between 0 and 50.', 400);
+        return;
+      }
+    }
+    if (body.freeTripLimit !== undefined) {
+      const n = Number(body.freeTripLimit);
+      if (!Number.isFinite(n) || n < 0 || n > 100 || !Number.isInteger(n)) {
+        sendError(res, 'freeTripLimit must be a whole number between 0 and 100.', 400);
+        return;
+      }
+    }
+    if (body.fuelPricePerLiterPKR !== undefined) {
+      const n = Number(body.fuelPricePerLiterPKR);
+      if (!Number.isFinite(n) || n <= 0 || n > 10000) {
+        sendError(res, 'fuelPricePerLiterPKR must be greater than 0 (PKR per litre).', 400);
+        return;
+      }
+    }
+    if (body.vehicleOverridesPKR !== undefined && (typeof body.vehicleOverridesPKR !== 'object' || Array.isArray(body.vehicleOverridesPKR))) {
+      sendError(res, 'vehicleOverridesPKR must be an object map.', 400);
+      return;
+    }
+    if (body.flightRouteOverridesPKR !== undefined && (typeof body.flightRouteOverridesPKR !== 'object' || Array.isArray(body.flightRouteOverridesPKR))) {
+      sendError(res, 'flightRouteOverridesPKR must be an object map.', 400);
+      return;
+    }
+
+    // ── Apply ─────────────────────────────────────────────────────────────
+    const updated = await updateAdminConfig(body, req.user!.id);
+
+    // ── Audit log ─────────────────────────────────────────────────────────
+    // Capture which fields changed so the activity log is meaningful.
+    const changedFields = Object.keys(body).filter((k) =>
+      ['tripServiceFeePercent', 'freeTripLimit', 'fuelPricePerLiterPKR', 'vehicleOverridesPKR', 'flightRouteOverridesPKR'].includes(k)
+    );
+    const detailsLine =
+      changedFields.length > 0
+        ? `Updated pricing config: ${changedFields.join(', ')}`
+        : 'Updated pricing config (no recognised fields)';
+    await logAdminAction({
+      action: 'admin.config.update',
+      performedBy: req.user!.id,
+      targetType: 'AdminConfig',
+      targetId: 'default',
+      details: detailsLine,
+    });
+
+    sendSuccess(res, { config: updated }, 'Configuration updated');
+  } catch (err) {
+    next(err);
+  }
 };

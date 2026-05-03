@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { C } from "../../styles/colors";
 import api from "../../api/client";
+import Toast from "../../components/ui/Toast";
 
 const STATUS_STYLE = {
   Open:        { bg:"rgba(140,50,50,0.15)",  color:C.crimson  },
@@ -20,6 +21,8 @@ export default function AdminSupport({ tickets, setTickets, onReload }) {
   const [activeTicket, setActiveTicket] = useState(null);
   const [msgText,      setMsgText]      = useState("");
   const [sending,      setSending]      = useState(false);
+  // Day 6: replace native alert() with styled toast
+  const [toast,        setToast]        = useState(null);
   const msgEndRef = useRef();
 
   const filtered = tickets.filter(t => {
@@ -43,7 +46,9 @@ export default function AdminSupport({ tickets, setTickets, onReload }) {
       setTickets(p => p.map(t => t._id === updated._id ? updated : t));
       setMsgText("");
       setTimeout(() => msgEndRef.current?.scrollIntoView({behavior:"smooth"}), 50);
-    } catch (err) { alert(err.response?.data?.message || "Send failed."); }
+    } catch (err) {
+      setToast({ kind: "error", message: err.response?.data?.message || "Send failed." });
+    }
     finally { setSending(false); }
   };
 
@@ -53,13 +58,17 @@ export default function AdminSupport({ tickets, setTickets, onReload }) {
       await api.patch(`/admin/support/${activeTicket._id}`, { status });
       setActiveTicket(p => ({ ...p, status }));
       setTickets(p => p.map(t => t._id === activeTicket._id ? { ...t, status } : t));
-    } catch (err) { alert("Status update failed."); }
+      setToast({ kind: "success", message: `Ticket marked as ${status}.` });
+    } catch {
+      setToast({ kind: "error", message: "Status update failed." });
+    }
   };
 
   const fmtDate = (d) => new Date(d).toLocaleDateString("en-PK",{month:"short",day:"numeric",year:"numeric"});
   const fmtTime = (d) => new Date(d).toLocaleTimeString("en-PK",{hour:"2-digit",minute:"2-digit"});
 
   return (
+    <>
     <div className="anim-fadeIn">
       {/* Header */}
       <div style={{ marginBottom:24 }}>
@@ -191,5 +200,7 @@ export default function AdminSupport({ tickets, setTickets, onReload }) {
         )}
       </div>
     </div>
+    <Toast toast={toast} onClose={() => setToast(null)} />
+    </>
   );
 }

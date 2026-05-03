@@ -2,9 +2,14 @@ import { useState } from "react";
 import { C } from "../../styles/colors";
 import { Icon } from "../../components/Icon";
 import api from "../../api/client";
+import Toast from "../../components/ui/Toast";
+import ConfirmModal from "../../components/ui/ConfirmModal";
 
 export default function AdminUsers({ users, setUsers }) {
   const [search, setSearch] = useState("");
+  // Day 6: replace native alert() / window.confirm() with styled UI
+  const [toast, setToast]     = useState(null);
+  const [confirm, setConfirm] = useState(null);
 
   const filtered = users.filter(
     (u) =>
@@ -17,22 +22,32 @@ export default function AdminUsers({ users, setUsers }) {
     try {
       await api.patch(`/admin/users/${id}/status`, { status: newStatus });
       setUsers(users.map((u) => (u.id === id ? { ...u, status: newStatus } : u)));
+      setToast({ kind: "success", message: `User ${newStatus === "Active" ? "unblocked" : "blocked"}.` });
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to update user status.");
+      setToast({ kind: "error", message: err.response?.data?.message || "Failed to update user status." });
     }
   };
 
-  const deleteUser = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this user?")) return;
-    try {
-      await api.delete(`/admin/users/${id}`);
-      setUsers(users.filter((u) => u.id !== id));
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to delete user.");
-    }
+  const deleteUser = (id) => {
+    setConfirm({
+      title: "Delete this user?",
+      message: "All trips and data linked to this user will also be removed. This cannot be undone.",
+      confirmLabel: "Delete user",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          await api.delete(`/admin/users/${id}`);
+          setUsers(users.filter((u) => u.id !== id));
+          setToast({ kind: "success", message: "User deleted." });
+        } catch (err) {
+          setToast({ kind: "error", message: err.response?.data?.message || "Failed to delete user." });
+        }
+      },
+    });
   };
 
   return (
+    <>
     <div className="anim-fadeIn">
       <div style={{ marginBottom: 24, position: "relative" }}>
         <input
@@ -143,5 +158,8 @@ export default function AdminUsers({ users, setUsers }) {
         </table>
       </div>
     </div>
+    <Toast toast={toast} onClose={() => setToast(null)} />
+    <ConfirmModal confirm={confirm} onClose={() => setConfirm(null)} />
+    </>
   );
 }

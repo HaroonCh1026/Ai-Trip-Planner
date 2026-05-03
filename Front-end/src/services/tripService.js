@@ -85,6 +85,26 @@ export const tripService = {
     return result.data.trip;
   },
 
+  // ── Get insider insights for a trip (Day 4 Msg 2, Pro feature) ───────────
+  // First call generates them (~10s, hits Gemini). Subsequent calls return
+  // cached insights instantly. Returns:
+  //   { insights: { destination, tips: [...], generatedAt }, cached: bool }
+  async getInsiderInsights(tripId) {
+    const res = await fetch(`${BASE}/ai/insights/${tripId}`, {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const message = err.message || 'Failed to load insider insights';
+      const error = new Error(message);
+      error.status = res.status;
+      throw error;
+    }
+    const result = await res.json();
+    return result.data; // { insights, cached }
+  },
+
   // ── Support ticket: submit (works for logged-in or guest) ─────────────────
   async submitSupportTicket({ name, email, category, message }) {
     const token = localStorage.getItem('token');

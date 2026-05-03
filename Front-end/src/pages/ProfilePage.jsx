@@ -57,7 +57,6 @@ export default function ProfilePage({
   const fileRef = useRef();
 
   const isPro = user.plan === "pro";
-  const FREE_LIMIT = 5;
   const initials = (info.name || "U")
     .split(" ")
     .map((w) => w[0])

@@ -8,6 +8,7 @@ import { AuthRequest } from "../types";
 import config from "../config/config";
 import crypto from "crypto";
 import { sendPasswordResetEmail, sendWelcomeEmail } from "../services/emailTemplates";
+import { getEffectiveConfig } from "../services/adminConfig.service";
 //                                                    ^^^^^^^^^^^^^^^^ Add this
 
 const buildUserPayload = (user: InstanceType<typeof User>) => ({
@@ -300,7 +301,18 @@ export const getMe = async (
     }
     // ──────────────────────────────────────────────────────────────────────
 
-    sendSuccess(res, { user: buildUserPayload(user) });
+    // ─── Day 6: include effective free trip limit (admin-editable) ────────
+    // The frontend uses this to display "X / Y free trips used" correctly
+    // even if admin lowers the limit via Pricing Controls. Cached with 30s
+    // TTL in adminConfig.service so this is essentially free.
+    const cfg = await getEffectiveConfig();
+
+    sendSuccess(res, {
+      user: buildUserPayload(user),
+      config: {
+        freeTripLimit: cfg.freeTripLimit,
+      },
+    });
   } catch (err) {
     next(err);
   }

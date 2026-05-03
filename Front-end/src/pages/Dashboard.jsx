@@ -6,12 +6,14 @@ import { DESTINATIONS } from "../constants/data";
 import TripCard from "../components/TripCard";
 import ProfilePage from "./ProfilePage";
 import api from "../api/client";
+import ConfirmModal from "../components/ui/ConfirmModal";
 
 const VALID_TABS = ["trips", "explore", "history", "profile"];
 
 export default function Dashboard({
   user,
   trips: initialTrips,
+  appConfig,
   onCreateTrip,
   onViewTrip,
   onLogout,
@@ -32,10 +34,14 @@ export default function Dashboard({
   };
   const [trips, setTrips] = useState(initialTrips || []);
   const [loading, setLoading] = useState(false);
+  // Day 6: replace window.confirm() with styled modal
+  const [confirm, setConfirm] = useState(null);
 
   if (!user) return null;
 
-  const FREE_LIMIT = 5;
+  // Day 6: free trip limit comes from /auth/me (admin-editable in Pricing
+  // Controls). Falls back to 5 if appConfig hasn't loaded yet.
+  const FREE_LIMIT = appConfig?.freeTripLimit ?? 5;
   const tripsUsed = user?.tripsUsed || 0;
   const freeLeft = Math.max(0, FREE_LIMIT - tripsUsed);
   const isLimitHit = user?.plan === "free" && tripsUsed >= FREE_LIMIT;
@@ -74,17 +80,24 @@ export default function Dashboard({
     }
   };
 
-  const handleMarkCancelled = async (tripId) => {
-    if (!window.confirm("Mark this trip as cancelled?")) return;
-    try {
-      await api.patch(`/trips/${tripId}/status`, { status: "cancelled" });
-      setTrips((p) =>
-        p.map((t) => (t._id === tripId ? { ...t, status: "cancelled" } : t)),
-      );
-      if (onTripStatusUpdate) onTripStatusUpdate(tripId, "cancelled");
-    } catch (err) {
-      console.error(err);
-    }
+  const handleMarkCancelled = (tripId) => {
+    setConfirm({
+      title: "Mark this trip as cancelled?",
+      message: "You can re-create it later from your trip history. The itinerary will be preserved.",
+      confirmLabel: "Cancel trip",
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          await api.patch(`/trips/${tripId}/status`, { status: "cancelled" });
+          setTrips((p) =>
+            p.map((t) => (t._id === tripId ? { ...t, status: "cancelled" } : t)),
+          );
+          if (onTripStatusUpdate) onTripStatusUpdate(tripId, "cancelled");
+        } catch (err) {
+          console.error(err);
+        }
+      },
+    });
   };
 
   const tabs = [
@@ -95,6 +108,7 @@ export default function Dashboard({
   ];
 
   return (
+    <>
     <div style={{ minHeight: "100vh", background: C.nearBlack }}>
       {/* ── Top Nav ── */}
       <nav
@@ -659,6 +673,8 @@ export default function Dashboard({
         )}
       </div>
     </div>
+    <ConfirmModal confirm={confirm} onClose={() => setConfirm(null)} />
+    </>
   );
 }
 

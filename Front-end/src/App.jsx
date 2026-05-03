@@ -114,6 +114,10 @@ function AppInner() {
   const location = useLocation();
   const [user, setUser] = useState(null);
   const [trips, setTrips] = useState([]);
+  // Day 6: appConfig holds public-safe operational settings from /auth/me
+  // (currently just freeTripLimit). Falls through to a safe default of 5
+  // if the backend hasn't responded yet or failed.
+  const [appConfig, setAppConfig] = useState({ freeTripLimit: 5 });
   const [activeTrip, setActiveTrip] = useState(null);
   const [aiConfig, setAiConfig] = useState(AI_CONFIG);
   const [bootstrapped, setBootstrapped] = useState(false);
@@ -136,6 +140,8 @@ function AppInner() {
         .then(({ data }) => {
           const authUser = data?.data?.user;
           if (!authUser) throw new Error("No user returned");
+          // Day 6: capture admin-editable freeTripLimit for the UI
+          if (data?.data?.config) setAppConfig(data.data.config);
           localStorage.setItem("user", JSON.stringify(authUser));
           window.history.replaceState(
             {},
@@ -172,6 +178,8 @@ function AppInner() {
             setUser(fresh);
             localStorage.setItem("user", JSON.stringify(fresh));
           }
+          // Day 6: capture admin-editable freeTripLimit for the UI
+          if (data?.data?.config) setAppConfig(data.data.config);
         })
         .catch(() => {})
         .finally(() => setBootstrapped(true));
@@ -325,6 +333,7 @@ function AppInner() {
                 <Dashboard
                   user={user}
                   trips={trips}
+                  appConfig={appConfig}
                   onCreateTrip={() => navigate("/create")}
                   onViewTrip={handleViewTrip}
                   onLogout={handleLogout}
@@ -342,6 +351,7 @@ function AppInner() {
               <RequireAuth user={user}>
                 <TripCreator
                   user={user}
+                  appConfig={appConfig}
                   onBack={() => navigate("/dashboard")}
                   onComplete={handleCompleteTrip}
                 />

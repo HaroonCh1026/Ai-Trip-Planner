@@ -80,7 +80,7 @@ const mlPredictionSchema = new Schema(
     lowPKR: { type: Number, required: true },             // predictedCost - rmse
     highPKR: { type: Number, required: true },            // predictedCost + rmse
     rmsePKR: { type: Number, default: 0 },                // model's test-set RMSE
-    aiEstimatePKR: { type: Number, default: 0 },          // what Gemini claimed
+    aiEstimatePKR: { type: Number, default: 0 },          // what Gemini claimed (post-reconciliation)
     deltaPercent: { type: Number, default: 0 },           // (ai - predicted) / predicted * 100
     withinRange: { type: Boolean, default: true },        // is AI estimate within [low, high]?
     confidenceLabel: {                                    // human-readable verdict
@@ -89,6 +89,13 @@ const mlPredictionSchema = new Schema(
       default: 'accurate',
     },
     predictedAt: { type: Date, default: Date.now },
+    // ── Round 1 (Day 6+): Cost reconciliation audit ────────────────────────
+    // When Gemini's original total fell outside the ML range, we scaled it
+    // and the line items to ML midpoint. These fields preserve what Gemini
+    // ORIGINALLY said so we can audit + display transparency to the user.
+    originalAiCostPKR: { type: Number, default: 0 },      // Gemini's pre-reconciliation total
+    costReconciled: { type: Boolean, default: false },    // true = we scaled
+    scaleFactor: { type: Number, default: 1 },            // multiplier applied (1 = no change)
   },
   { _id: false }
 );
@@ -146,6 +153,16 @@ const tripSchema = new Schema<ITrip>(
     // Mongoose strictness to reject legitimate fields. Optional — most trips
     // pass validation cleanly and this field is absent.
     feasibility: { type: Schema.Types.Mixed, default: undefined },
+
+    // ── Insider Insights (Day 4 Msg 2) ─────────────────────────────────────
+    // Pro-only feature: AI-generated local insider tips for the destination
+    // (hidden gems, halal food, female-traveler safety, photo spots, cultural
+    // notes, transport hacks). Generated on first request, cached forever.
+    // Stored as Mixed because the `tips` array contains union-typed items
+    // and we don't want strict schema validation to reject a new category
+    // we add later. Optional — only set after the user actually requests
+    // insights from the itinerary view.
+    insiderInsights: { type: Schema.Types.Mixed, default: undefined },
   },
   {
     timestamps: true,

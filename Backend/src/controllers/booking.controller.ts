@@ -5,6 +5,7 @@ import Trip from '../models/Trip';
 import User from '../models/User';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types';
+import { getEffectiveConfig } from '../services/adminConfig.service';
 
 // ─── POST /api/bookings ────────────────────────────────────────────────────
 export const createBooking = async (
@@ -39,7 +40,12 @@ export const createBooking = async (
 //
 // On success, returns the saved Booking document. The frontend uses
 // the booking._id to route to /booking/:id/confirmed.
-const TRIP_SERVICE_FEE_PERCENT = 8;
+//
+// Day 5A: the fee % is now read live from AdminConfig (admin-editable).
+// We still persist the fee VALUE on each Booking row, so historical revenue
+// stays accurate even if the admin changes the % later. The constant below
+// is only the seed default used when AdminConfig is unreachable.
+const DEFAULT_TRIP_SERVICE_FEE_PERCENT = 8;
 
 export const bookTrip = async (
   req: AuthRequest,
@@ -69,7 +75,12 @@ export const bookTrip = async (
       return;
     }
 
-    const serviceFee = Math.round(baseAmount * (TRIP_SERVICE_FEE_PERCENT / 100));
+    // Read effective service fee % from AdminConfig (cached, falls back to
+    // default if config doc absent or Mongo read fails).
+    const cfg = await getEffectiveConfig();
+    const feePercent = cfg.tripServiceFeePercent ?? DEFAULT_TRIP_SERVICE_FEE_PERCENT;
+
+    const serviceFee = Math.round(baseAmount * (feePercent / 100));
     const finalAmount = baseAmount + serviceFee;
 
     // Snapshot the trip's headline fields so the booking confirmation page
@@ -103,7 +114,7 @@ export const bookTrip = async (
       res,
       {
         booking,
-        servicefeePercent: TRIP_SERVICE_FEE_PERCENT,
+        servicefeePercent: feePercent,
       },
       'Trip booked successfully',
       201

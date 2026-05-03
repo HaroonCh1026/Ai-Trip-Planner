@@ -11,9 +11,7 @@ import ReviewSummary from "../components/trip/ReviewSummary";
 import VehicleSelectStep from "../components/trip/VehicleSelectStep";
 import { Icon } from "../components/Icon";
 
-const FREE_LIMIT = 5;
-
-export default function TripCreator({ user, onBack, onComplete }) {
+export default function TripCreator({ user, appConfig, onBack, onComplete }) {
   // ── Conversation state ──────────────────────────────────────────────────
   // `phase` controls what the user sees:
   //   "chat"      — answering chatbot questions
@@ -40,6 +38,8 @@ export default function TripCreator({ user, onBack, onComplete }) {
   const [genStep, setGenStep] = useState(0);
   const [error, setError] = useState(null);
 
+  // Day 6: free trip limit is admin-editable via Pricing Controls; defaults to 5.
+  const FREE_LIMIT = appConfig?.freeTripLimit ?? 5;
   const tripsUsed = user?.tripsUsed || 0;
   const isLimitHit = user?.plan === "free" && tripsUsed >= FREE_LIMIT;
 

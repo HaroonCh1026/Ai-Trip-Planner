@@ -14,7 +14,8 @@ export type AdminAction =
   | 'blog.update'
   | 'blog.delete'
   | 'ticket.status'
-  | 'ticket.reply';
+  | 'ticket.reply'
+  | 'admin.config.update';   // Day 5A — pricing controls edit
 
 export interface IAdminLog extends Document {
   action: AdminAction;
@@ -48,6 +49,7 @@ const adminLogSchema = new Schema<IAdminLog>(
         'blog.delete',
         'ticket.status',
         'ticket.reply',
+        'admin.config.update',
       ],
       index: true,
     },

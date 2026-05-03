@@ -2,6 +2,8 @@ import { useState } from "react";
 import { C } from "../../styles/colors";
 import { Icon } from "../../components/Icon";
 import api from "../../api/client";
+import Toast from "../../components/ui/Toast";
+import ConfirmModal from "../../components/ui/ConfirmModal";
 
 const BLANK = { title: "", excerpt: "", content: "", image: "", category: "Travel Tips", author: "VoyageurAI Team", readTime: "5 min read", published: true };
 const CATS = ["Travel Tips", "Destination Guide", "Food & Culture", "Adventure", "Budget Travel", "Itinerary Ideas"];
@@ -13,6 +15,9 @@ export default function AdminBlogs({ blogs, setBlogs }) {
   const [saving, setSaving]   = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [search, setSearch]   = useState("");
+  // Day 6: replace alert() / window.confirm() with proper UI
+  const [toast, setToast]     = useState(null);
+  const [confirm, setConfirm] = useState(null);
 
   const filtered = blogs.filter(b =>
     b.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -24,40 +29,55 @@ export default function AdminBlogs({ blogs, setBlogs }) {
 
   const handleSave = async () => {
     if (!form.title.trim() || !form.excerpt.trim() || !form.content.trim()) {
-      alert("Title, excerpt and content are required."); return;
+      setToast({ kind: "error", message: "Title, excerpt and content are required." }); return;
     }
     setSaving(true);
     try {
       if (editing) {
         const { data } = await api.patch(`/admin/blogs/${editing._id}`, form);
         setBlogs(p => p.map(b => b._id === editing._id ? data.data.blog : b));
+        setToast({ kind: "success", message: "Blog post updated." });
       } else {
         const { data } = await api.post("/admin/blogs", form);
         setBlogs(p => [data.data.blog, ...p]);
+        setToast({ kind: "success", message: "Blog post created." });
       }
       setView("list");
-    } catch (err) { alert(err.response?.data?.message || "Save failed."); }
-    finally { setSaving(false); }
+    } catch (err) {
+      setToast({ kind: "error", message: err.response?.data?.message || "Save failed." });
+    } finally { setSaving(false); }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this blog post?")) return;
-    setDeleting(id);
-    try {
-      await api.delete(`/admin/blogs/${id}`);
-      setBlogs(p => p.filter(b => b._id !== id));
-    } catch (err) { alert(err.response?.data?.message || "Delete failed."); }
-    finally { setDeleting(null); }
+  const handleDelete = (id) => {
+    setConfirm({
+      title: "Delete this blog post?",
+      message: "This action cannot be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+      onConfirm: async () => {
+        setDeleting(id);
+        try {
+          await api.delete(`/admin/blogs/${id}`);
+          setBlogs(p => p.filter(b => b._id !== id));
+          setToast({ kind: "success", message: "Blog post deleted." });
+        } catch (err) {
+          setToast({ kind: "error", message: err.response?.data?.message || "Delete failed." });
+        } finally { setDeleting(null); }
+      },
+    });
   };
 
   const togglePublish = async (blog) => {
     try {
       const { data } = await api.patch(`/admin/blogs/${blog._id}`, { published: !blog.published });
       setBlogs(p => p.map(b => b._id === blog._id ? data.data.blog : b));
-    } catch (err) { alert("Failed to update status."); }
+    } catch {
+      setToast({ kind: "error", message: "Failed to update status." });
+    }
   };
 
   if (view === "form") return (
+    <>
     <div className="anim-fadeIn">
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 32 }}>
         <button onClick={() => setView("list")} style={{ background: "transparent", border: "none", color: C.midGray, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
@@ -108,9 +128,13 @@ export default function AdminBlogs({ blogs, setBlogs }) {
         </div>
       </div>
     </div>
+    <Toast toast={toast} onClose={() => setToast(null)} />
+    <ConfirmModal confirm={confirm} onClose={() => setConfirm(null)} />
+    </>
   );
 
   return (
+    <>
     <div className="anim-fadeIn">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28 }}>
         <div>
@@ -168,5 +192,8 @@ export default function AdminBlogs({ blogs, setBlogs }) {
         </div>
       )}
     </div>
+    <Toast toast={toast} onClose={() => setToast(null)} />
+    <ConfirmModal confirm={confirm} onClose={() => setConfirm(null)} />
+    </>
   );
 }

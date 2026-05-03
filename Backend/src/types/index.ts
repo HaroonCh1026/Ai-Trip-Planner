@@ -101,6 +101,31 @@ export interface IFeasibility {
   criticalCount: number;
 }
 
+// ─── Day 4 Msg 2: Insider Insights (Pro feature) ────────────────────────────
+// AI-generated local-flavor tips for the destination. Cached on the Trip
+// document so the second click is instant — we only call Gemini once per trip.
+export interface IInsiderTip {
+  category:
+    | 'hidden_gem'         // off-the-beaten-path viewpoints, lesser-known spots
+    | 'food'               // halal-by-default authentic local food spots
+    | 'culture'            // etiquette, taboos, dress code, local customs
+    | 'safety'             // female-traveler tips, neighborhood advice
+    | 'photo'              // best photo spots, golden-hour timing
+    | 'transport'          // local transport hacks, fare tips, scams to avoid
+    | 'shopping'           // bazaars, what to buy, bargaining etiquette
+    | 'tip';               // general "wish I'd known" item
+  title: string;           // short headline, ~6-10 words
+  detail: string;          // 1-2 sentence explanation
+}
+
+export interface IInsiderInsights {
+  destination: string;     // captures destination at generation time so we
+                           // can detect staleness if user later refines and
+                           // changes destination (rare but possible)
+  tips: IInsiderTip[];
+  generatedAt: Date;
+}
+
 export interface ITrip extends Document {
   _id: Types.ObjectId;
   userId: Types.ObjectId;
@@ -126,6 +151,8 @@ export interface ITrip extends Document {
   mlPrediction?: IMLPrediction;
   // ─── Day 3: feasibility validator report (only set when violations found)
   feasibility?: IFeasibility;
+  // ─── Day 4 Msg 2: Insider Insights (Pro-only, cached after first generation)
+  insiderInsights?: IInsiderInsights;
   createdAt: Date;
 }
 

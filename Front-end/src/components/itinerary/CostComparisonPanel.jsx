@@ -169,6 +169,27 @@ export default function CostComparisonPanel({ trip }) {
         </div>
       </div>
 
+      {/* Round 1 fix: when AI's original cost was scaled to match ML's range,
+          surface this transparently. Users see why the bookable price aligns
+          with the typical range. Hidden when no reconciliation happened. */}
+      {ml.costReconciled && ml.originalAiCostPKR > 0 && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "10px 14px",
+            background: "rgba(168,119,212,0.06)",
+            border: "1px solid rgba(168,119,212,0.25)",
+            borderRadius: 6,
+            fontSize: 12,
+            color: "rgba(232,232,232,0.85)",
+            lineHeight: 1.5,
+          }}
+        >
+          <strong style={{ color: "#A877D4" }}>ℹ Cost reconciled.</strong>{" "}
+          Initial AI estimate of {fmt(ml.originalAiCostPKR)} fell outside the typical range for similar trips, so we adjusted to align with the ML model's expected cost. This keeps the bookable price consistent with what travellers actually spend.
+        </div>
+      )}
+
       {/* Subtle branded sign-off — no technical machinery */}
       <div style={{ fontSize: 11, color: C.midGray, marginTop: 12, lineHeight: 1.5, textAlign: "right" }}>
         Powered by VoyageurAI Insights

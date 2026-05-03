@@ -13,6 +13,7 @@ import CostComparisonPanel from "../components/itinerary/CostComparisonPanel";
 import FeasibilityWarnings from "../components/itinerary/FeasibilityWarnings";
 import WhyUsPanel from "../components/itinerary/WhyUsPanel";
 import BookTripButton from "../components/itinerary/BookTripButton";
+import InsiderTipsPanel from "../components/itinerary/InsiderTipsPanel";
 
 export default function ItineraryView({ trip, onBack }) {
   const navigate = useNavigate();
@@ -152,6 +153,18 @@ export default function ItineraryView({ trip, onBack }) {
             Component handles the entire two-step flow (preview → confirm) and
             navigates to the confirmation page on success. */}
         {days.length > 0 && <BookTripButton trip={fullTrip} />}
+
+        {/* Day 4 Msg 2: Insider Tips — Pro feature. AI-generated local tips
+            that complement the itinerary (hidden gems, halal food, photo
+            spots, female-traveler safety, cultural notes). Cached on the
+            trip after first generation so subsequent visits are instant. */}
+        {days.length > 0 && (
+          <InsiderTipsPanel
+            trip={fullTrip}
+            isPro={isPro}
+            onUpgradeClick={() => navigate("/profile?tab=billing")}
+          />
+        )}
 
         {/* Round 7: conversational refinement panel — Pro feature */}
         {days.length > 0 && (
