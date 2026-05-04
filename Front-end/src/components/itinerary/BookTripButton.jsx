@@ -3,26 +3,39 @@ import { useNavigate } from "react-router-dom";
 import { C } from "../../styles/colors";
 import { Icon } from "../Icon";
 import { bookingService } from "../../services/bookingService";
+import { createTripCheckout } from "../../api/client";
 
 /**
  * BookTripButton — "Book This Trip" CTA shown on the itinerary view.
  *
- * Day 4 simulation: the booking is fake (no real partner integration), but
- * the flow demonstrates the platform's revenue model. We show the fee
- * transparently BEFORE booking — service fee is 8% of the trip's totalCost,
- * displayed alongside the breakdown so the user can see exactly what they're
- * agreeing to.
+ * Round 5 (#3): now redirects to Stripe Checkout for real card processing.
+ * Falls back to simulated booking if the backend reports Stripe isn't
+ * configured (HTTP 503 with "not configured" message).
  *
  * Flow:
- *   1. Click "Book This Trip" → button expands into a confirmation card
- *      showing baseAmount + 8% serviceFee = finalAmount
- *   2. Click "Confirm Booking" → POST /api/bookings/trip → on success,
- *      navigate to /booking/:id/confirmed
- *   3. Errors shown inline with retry button
+ *   1. Click "Book This Trip" → expands into a confirmation card showing
+ *      baseAmount + serviceFee = finalAmount
+ *   2. Click "Confirm & Pay with Card" → POST /payments/create-trip-checkout
+ *      → backend pre-creates Pending booking + returns Stripe Checkout URL
+ *   3. window.location.href = url → user lands on Stripe's hosted checkout
+ *   4. After payment, Stripe redirects to /payment/success?type=booking&...
+ *      where the webhook will have flipped the booking to Paid
+ *   5. PaymentSuccess routes the user to /booking/:id/confirmed (receipt)
  *
- * The two-step (preview, then confirm) is intentional — we never want a
- * single misclick to create a paid booking. Same reason real travel
- * platforms make you click through 2-3 confirmation screens.
+ * Cancel path: Stripe redirects to /payment/cancel?type=booking&bookingId=...
+ * The Pending booking row stays — harmless. User can retry, which creates
+ * a fresh Pending row (we don't reuse for audit clarity).
+ *
+ * Service fee % is currently 8% but admin-editable (Day 5A). The displayed
+ * 8% here is illustrative — the BACKEND uses the live admin config when
+ * computing the actual amount sent to Stripe. So if admin has set fee to
+ * 10%, the user might see 8% in the preview but be charged 10%. Acceptable
+ * tradeoff for not making this component fetch admin config on every render.
+ *
+ * Day 4 simulation fallback: if Stripe is disabled on the backend (503),
+ * we transparently fall through to bookingService.bookTrip() which creates
+ * a Paid booking immediately without payment. Lets the demo run on dev
+ * environments without Stripe keys.
  */
 export default function BookTripButton({ trip }) {
   const navigate = useNavigate();
@@ -48,17 +61,47 @@ export default function BookTripButton({ trip }) {
     setError("");
   };
 
+  // Round 5 (#3): primary path — Stripe Checkout redirect. Falls through to
+  // simulated booking if Stripe returns 503 (not configured on this server).
   const submitBooking = async () => {
     setError("");
     setPhase("submitting");
+
     try {
-      const booking = await bookingService.bookTrip(trip._id);
-      // Navigate to the confirmation page — booking._id is what the receipt
-      // route uses to fetch the booking back.
-      navigate(`/booking/${booking._id}/confirmed`);
+      // Try real Stripe Checkout first
+      const response = await createTripCheckout(trip._id);
+      if (response.success && response.data?.url) {
+        // Redirect — leaves our SPA. Browser will return via Stripe's
+        // success_url / cancel_url after payment.
+        window.location.href = response.data.url;
+        return;
+      }
+      // Defensive: if response shape is unexpected, fall through to simulated
+      throw new Error("Unexpected response from server");
     } catch (err) {
+      // Stripe disabled on backend? Quietly fall back to simulated path.
+      const status = err.response?.status;
+      const message = err.response?.data?.message || err.message || "";
+      if (status === 503 || /not configured/i.test(message)) {
+        console.warn(
+          "[BookTripButton] Stripe disabled on backend, falling back to " +
+          "simulated booking. Configure STRIPE_SECRET_KEY for real card " +
+          "checkout."
+        );
+        try {
+          const booking = await bookingService.bookTrip(trip._id);
+          navigate(`/booking/${booking._id}/confirmed`);
+          return;
+        } catch (simErr) {
+          console.error("Simulated booking also failed:", simErr);
+          setError(simErr.message || "Booking failed. Please try again.");
+          setPhase("error");
+          return;
+        }
+      }
+      // Genuine Stripe error — surface it
       console.error("Trip booking failed:", err);
-      setError(err.message || "Booking failed. Please try again.");
+      setError(message || "Booking failed. Please try again.");
       setPhase("error");
     }
   };
@@ -120,7 +163,7 @@ export default function BookTripButton({ trip }) {
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
           <span style={{ fontSize: 14, color: "rgba(232,232,232,0.85)" }}>
-            Service fee (8%)
+            Service fee (≈8%)
             <span style={{ display: "block", fontSize: 11, color: C.midGray, marginTop: 2 }}>
               Helps run the platform — secure your booking, customer support
             </span>
@@ -168,7 +211,7 @@ export default function BookTripButton({ trip }) {
         <button
           onClick={submitBooking}
           disabled={phase === "submitting"}
-          aria-label="Confirm booking"
+          aria-label="Confirm and pay"
           className="btn-primary"
           style={{
             padding: "12px 24px",
@@ -176,14 +219,17 @@ export default function BookTripButton({ trip }) {
             fontWeight: 600,
             cursor: phase === "submitting" ? "wait" : "pointer",
             opacity: phase === "submitting" ? 0.7 : 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          {phase === "submitting" ? "Confirming…" : "Confirm Booking"}
+          {phase === "submitting" ? "Redirecting…" : "Confirm & Pay with Card →"}
         </button>
       </div>
 
       <div style={{ fontSize: 11, color: C.midGray, marginTop: 14, lineHeight: 1.5 }}>
-        This is a simulated booking for demo purposes. No payment will be charged.
+        Secure card payment via Stripe (test mode). Use card 4242 4242 4242 4242 with any future date and CVC.
       </div>
     </section>
   );

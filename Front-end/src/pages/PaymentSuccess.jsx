@@ -4,12 +4,29 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { C } from "../styles/colors";
 import { Icon } from "../components/Icon";
 import { getSubscriptionStatus } from "../api/client";
+import { bookingService } from "../services/bookingService";
 
+/**
+ * PaymentSuccess — landing page after a successful Stripe Checkout.
+ *
+ * Round 5 (#3): now handles two flows distinguished by ?type:
+ *   • type=subscription (or absent, for legacy)  → Pro upgrade verification
+ *                                                   then redirects to dashboard
+ *   • type=booking (with bookingId)              → trip booking verification
+ *                                                   then routes to /booking/:id/confirmed
+ *
+ * The webhook handles the actual database mutation. This page just polls
+ * for that mutation to be visible and then redirects appropriately.
+ */
 export default function PaymentSuccess() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Round 5 (#3): branch by ?type query param.
+  const flowType = searchParams.get("type") || "subscription";
+  const bookingIdParam = searchParams.get("bookingId");
 
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
@@ -18,11 +35,57 @@ export default function PaymentSuccess() {
       return;
     }
 
+    // ── Booking flow ────────────────────────────────────────────────────
+    if (flowType === "booking" && bookingIdParam) {
+      const verifyBooking = async () => {
+        try {
+          // Webhook may take 1-3s to process. Poll the booking status up
+          // to 5 times with 1.5s gaps before giving up.
+          let booking = null;
+          for (let attempt = 0; attempt < 5; attempt++) {
+            await new Promise((r) => setTimeout(r, 1500));
+            try {
+              booking = await bookingService.getBookingById(bookingIdParam);
+              if (booking?.status === "Paid") break;
+            } catch (e) {
+              // 404 / network blip — keep retrying
+              console.warn(`[PaymentSuccess] poll attempt ${attempt + 1} failed:`, e.message);
+            }
+          }
+
+          if (booking?.status === "Paid") {
+            navigate(`/booking/${bookingIdParam}/confirmed`, { replace: true });
+            return;
+          }
+
+          // Stripe accepted the payment but our webhook hasn't flipped the
+          // row yet (or we couldn't fetch). Send the user to the receipt
+          // page anyway — it'll show the latest status; if still Pending
+          // it'll just say so. Better than leaving them stuck on this page.
+          setError(
+            booking
+              ? "We're still confirming your booking. The receipt page will update shortly."
+              : "Could not verify your booking right now, but your payment went through. Check your bookings list."
+          );
+          setLoading(false);
+        } catch (err) {
+          console.error("[PaymentSuccess] booking verification failed:", err);
+          setError(
+            "Could not verify booking status. Your payment went through; please check your email or your bookings list."
+          );
+          setLoading(false);
+        }
+      };
+      verifyBooking();
+      return;
+    }
+
+    // ── Subscription flow (existing behavior, preserved) ───────────────
     const refreshUserStatus = async () => {
       try {
         // Wait a few seconds for webhook to process
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
         const response = await getSubscriptionStatus();
         if (response.success && response.data.plan === "pro") {
           const storedUser = localStorage.getItem("user");
@@ -41,7 +104,7 @@ export default function PaymentSuccess() {
     };
 
     refreshUserStatus();
-  }, [searchParams, navigate]);
+  }, [searchParams, navigate, flowType, bookingIdParam]);
 
   if (loading) {
     return (
@@ -66,11 +129,17 @@ export default function PaymentSuccess() {
               animation: "spin 1s linear infinite",
             }}
           />
-          <p style={{ color: C.offWhite }}>Confirming your payment...</p>
+          <p style={{ color: C.offWhite }}>
+            {flowType === "booking" ? "Confirming your booking..." : "Confirming your payment..."}
+          </p>
         </div>
       </div>
     );
   }
+
+  // Booking flow with error: show inline message + link to bookings.
+  // Subscription flow with error: existing behavior.
+  const isBooking = flowType === "booking";
 
   return (
     <div
@@ -109,7 +178,9 @@ export default function PaymentSuccess() {
           Payment Successful! 🎉
         </h1>
         <p style={{ color: C.midGray, fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
-          Your Pro subscription is now active. You have unlimited access to all Pro features.
+          {isBooking
+            ? "Your trip booking has been processed. Loading your receipt..."
+            : "Your Pro subscription is now active. You have unlimited access to all Pro features."}
         </p>
         {error && (
           <div
@@ -127,20 +198,45 @@ export default function PaymentSuccess() {
           </div>
         )}
         <div style={{ display: "flex", gap: 12 }}>
-          <button
-            className="btn-primary"
-            onClick={() => navigate("/dashboard")}
-            style={{ flex: 1 }}
-          >
-            Go to Dashboard
-          </button>
-          <button
-            className="btn-secondary"
-            onClick={() => navigate("/profile")}
-            style={{ flex: 1 }}
-          >
-            View Profile
-          </button>
+          {isBooking ? (
+            <>
+              <button
+                className="btn-primary"
+                onClick={() =>
+                  bookingIdParam
+                    ? navigate(`/booking/${bookingIdParam}/confirmed`)
+                    : navigate("/dashboard")
+                }
+                style={{ flex: 1 }}
+              >
+                View Receipt
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => navigate("/dashboard")}
+                style={{ flex: 1 }}
+              >
+                Back to Dashboard
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="btn-primary"
+                onClick={() => navigate("/dashboard")}
+                style={{ flex: 1 }}
+              >
+                Go to Dashboard
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => navigate("/profile")}
+                style={{ flex: 1 }}
+              >
+                View Profile
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

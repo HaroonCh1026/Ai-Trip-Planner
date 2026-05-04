@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { C } from "../styles/colors";
 import { Icon } from "../components/Icon";
 import { DESTINATIONS } from "../constants/data";
 import TripCard from "../components/TripCard";
 import ProfilePage from "./ProfilePage";
-import api from "../api/client";
+import api, { createCheckoutSession } from "../api/client";
 import ConfirmModal from "../components/ui/ConfirmModal";
 
 const VALID_TABS = ["trips", "explore", "history", "profile"];
@@ -22,6 +22,7 @@ export default function Dashboard({
   onTripStatusUpdate,
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const urlTab = searchParams.get("tab");
   const activeTab = VALID_TABS.includes(urlTab) ? urlTab : "trips";
   const setActiveTab = (next) => {
@@ -36,6 +37,9 @@ export default function Dashboard({
   const [loading, setLoading] = useState(false);
   // Day 6: replace window.confirm() with styled modal
   const [confirm, setConfirm] = useState(null);
+  // Round 5b: paid bookings shown in the History tab.
+  const [bookings, setBookings] = useState([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
 
   if (!user) return null;
 
@@ -61,6 +65,32 @@ export default function Dashboard({
         .finally(() => setLoading(false));
     }
   }, [initialTrips, user.isAdmin]);
+
+  // Round 5b: load user's bookings for the History tab. Filtered client-side
+  // to Paid trip bookings only (subscription bookings are admin-financial,
+  // not user-relevant). Cheap fetch — runs once on Dashboard mount.
+  useEffect(() => {
+    if (user.isAdmin) return;
+    setBookingsLoading(true);
+    api
+      .get("/bookings")
+      .then(({ data }) => {
+        setBookings(data?.data?.bookings || []);
+      })
+      .catch((err) => {
+        console.error("Failed to load bookings:", err);
+        // Non-fatal — History tab just won't show the bookings section.
+      })
+      .finally(() => setBookingsLoading(false));
+  }, [user.isAdmin]);
+
+  // Round 5b: derive paid trip bookings.
+  // Filters out: pending bookings (incomplete checkouts), cancelled/declined,
+  // and subscription bookings (those are user's Pro upgrades, not trip
+  // purchases — they show up in Plan & Billing instead).
+  const paidBookings = bookings.filter(
+    (b) => b.status === "Paid" && b.bookingType === "trip"
+  );
 
   const upcomingTrips = trips.filter(
     (t) => !t.status || t.status === "upcoming",
@@ -98,6 +128,36 @@ export default function Dashboard({
         }
       },
     });
+  };
+
+  // Round 5b: Direct-to-Stripe upgrade from Dashboard.
+  // Replaces the old "navigate to /profile and let user click Upgrade there"
+  // flow. Calls /payments/create-checkout-session and redirects to Stripe
+  // immediately — same one-click flow the ProfilePage UpgradeModal uses
+  // after the user clicks Confirm.
+  const [upgrading, setUpgrading] = useState(false);
+  const [upgradeError, setUpgradeError] = useState("");
+  const handleUpgradeClick = async () => {
+    setUpgrading(true);
+    setUpgradeError("");
+    try {
+      const response = await createCheckoutSession();
+      if (response.success && response.data?.url) {
+        // Leave the SPA — Stripe will redirect us back to /payment/success
+        window.location.href = response.data.url;
+        return;
+      }
+      throw new Error(response.message || "Could not start checkout");
+    } catch (err) {
+      console.error("Upgrade error:", err);
+      setUpgradeError(
+        err.response?.data?.message ||
+          err.message ||
+          "Something went wrong starting checkout. Please try again."
+      );
+      setUpgrading(false);
+    }
+    // Note: on success we redirect, so no need to setUpgrading(false) there.
   };
 
   const tabs = [
@@ -302,19 +362,96 @@ export default function Dashboard({
               <h2 className="display-heading" style={{ fontSize: 26 }}>
                 My Trips
               </h2>
-              <button
-                className="btn-primary"
-                onClick={isLimitHit ? undefined : onCreateTrip}
-                disabled={isLimitHit}
-                title={isLimitHit ? "Upgrade to Pro" : ""}
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                {/* Round 5b (#7a updated): direct-to-Stripe upgrade.
+                    Bypasses the previous "navigate to profile then click again"
+                    UX. Calls /payments/create-checkout-session and redirects
+                    to Stripe immediately. Falls back to in-card error message
+                    on failure (e.g., Stripe not configured). */}
+                {!isPro && !isLimitHit && (
+                  <button
+                    onClick={handleUpgradeClick}
+                    disabled={upgrading}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "10px 18px",
+                      background: "linear-gradient(135deg, rgba(255,180,0,0.15), rgba(140,50,50,0.15))",
+                      border: `1.5px solid ${C.crimson}`,
+                      borderRadius: 8,
+                      color: "#FFB400",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      fontFamily: "'DM Sans', sans-serif",
+                      cursor: upgrading ? "wait" : "pointer",
+                      opacity: upgrading ? 0.6 : 1,
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!upgrading) {
+                        e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,180,0,0.25), rgba(140,50,50,0.25))";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,180,0,0.15), rgba(140,50,50,0.15))";
+                    }}
+                    title="Get unlimited AI itineraries — PKR 2,500/month"
+                  >
+                    <Icon.crown />
+                    {upgrading ? "Redirecting…" : "Upgrade to Pro"}
+                  </button>
+                )}
+                <button
+                  className="btn-primary"
+                  onClick={isLimitHit ? undefined : onCreateTrip}
+                  disabled={isLimitHit}
+                  title={isLimitHit ? "Upgrade to Pro" : ""}
+                  style={{
+                    opacity: isLimitHit ? 0.5 : 1,
+                    cursor: isLimitHit ? "not-allowed" : "pointer",
+                  }}
+                >
+                  <Icon.plus /> Plan New Trip
+                </button>
+              </div>
+            </div>
+            {/* Round 5b: surface direct-Stripe upgrade errors inline.
+                Auto-clears when the user tries again successfully. */}
+            {upgradeError && (
+              <div
+                role="alert"
                 style={{
-                  opacity: isLimitHit ? 0.5 : 1,
-                  cursor: isLimitHit ? "not-allowed" : "pointer",
+                  padding: "12px 18px",
+                  background: "rgba(255,107,92,0.08)",
+                  border: "1px solid rgba(255,107,92,0.4)",
+                  borderRadius: 8,
+                  color: "#FF6B5C",
+                  fontSize: 13,
+                  marginBottom: 16,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
                 }}
               >
-                <Icon.plus /> Plan New Trip
-              </button>
-            </div>
+                <span>⚠ {upgradeError}</span>
+                <button
+                  onClick={() => setUpgradeError("")}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#FF6B5C",
+                    cursor: "pointer",
+                    fontSize: 16,
+                    padding: 0,
+                  }}
+                  aria-label="Dismiss"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             {isLimitHit && (
               <div
                 style={{
@@ -349,9 +486,15 @@ export default function Dashboard({
                 </div>
                 <button
                   className="btn-primary"
-                  onClick={() => setActiveTab("profile")}
+                  onClick={handleUpgradeClick}
+                  disabled={upgrading}
+                  style={{
+                    cursor: upgrading ? "wait" : "pointer",
+                    opacity: upgrading ? 0.6 : 1,
+                  }}
                 >
-                  <Icon.crown /> Upgrade to Pro
+                  <Icon.crown />
+                  {upgrading ? "Redirecting…" : "Upgrade to Pro"}
                 </button>
               </div>
             )}
@@ -534,10 +677,73 @@ export default function Dashboard({
                 Trip History
               </h2>
               <p style={{ color: C.midGray, fontSize: 14 }}>
-                All your completed and cancelled adventures
+                Your paid bookings, completed adventures, and cancelled trips — all in one place
               </p>
             </div>
-            {completedTrips.length === 0 && cancelledTrips.length === 0 ? (
+
+            {/* Round 5b: Paid Bookings section.
+                Distinct emerald accent so paid bookings stand out from the
+                completed/cancelled trip-status sections below. Each row links
+                to /booking/:id/confirmed for the receipt. */}
+            {bookingsLoading ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: 24,
+                  color: C.midGray,
+                  fontSize: 13,
+                  marginBottom: 24,
+                }}
+              >
+                Loading your bookings…
+              </div>
+            ) : paidBookings.length > 0 ? (
+              <div style={{ marginBottom: 40 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    marginBottom: 20,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: "rgb(120,220,180)",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "rgb(120,220,180)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.1em",
+                    }}
+                  >
+                    Paid Bookings ({paidBookings.length})
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  {paidBookings.map((b) => (
+                    <BookingRow key={b._id} booking={b} navigate={navigate} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {completedTrips.length === 0 &&
+            cancelledTrips.length === 0 &&
+            paidBookings.length === 0 ? (
               <div
                 className="card"
                 style={{ padding: "60px 40px", textAlign: "center" }}
@@ -553,8 +759,7 @@ export default function Dashboard({
                   No history yet
                 </h3>
                 <p style={{ color: C.midGray, fontSize: 14 }}>
-                  Complete a trip to see it here. Mark trips as completed from
-                  My Trips tab.
+                  Book a trip or mark one as completed from My Trips to see it here.
                 </p>
               </div>
             ) : (
@@ -749,6 +954,151 @@ function HistoryRow({ trip, onClick, statusColor }) {
           PKR {Number(trip.budget || 0).toLocaleString()}
         </div>
       </div>
+      <Icon.arrow />
+    </div>
+  );
+}
+// ─── Round 5b: BookingRow ───────────────────────────────────────────────
+// Renders a single paid booking in the History tab. Click → /booking/:id/confirmed
+// (the existing receipt page). Distinct from HistoryRow (which renders trip
+// status) by using emerald accents + a "PAID" pill instead of completed/cancelled.
+function BookingRow({ booking, navigate }) {
+  const snap = booking.tripSnapshot || {};
+  const fmt = (n) =>
+    `PKR ${Number(n || 0).toLocaleString("en-PK")}`;
+  const paidAmount = Number(
+    booking.finalAmount || booking.amount || 0
+  );
+  // Booking createdAt → human date. Falls back to "—" if missing.
+  const bookedOn = booking.createdAt
+    ? new Date(booking.createdAt).toLocaleDateString("en-PK", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "—";
+
+  return (
+    <div
+      onClick={() => navigate(`/booking/${booking._id}/confirmed`)}
+      className="hover-lift"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          navigate(`/booking/${booking._id}/confirmed`);
+        }
+      }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 20,
+        padding: "16px 20px",
+        background: C.darkGray,
+        borderRadius: 10,
+        border: `1px solid rgba(120,220,180,0.18)`,
+        cursor: "pointer",
+        transition: "all 0.2s",
+      }}
+    >
+      {/* Trip image (from snapshot, falls back to a generic Pakistan landscape) */}
+      <div
+        style={{
+          width: 60,
+          height: 60,
+          borderRadius: 8,
+          overflow: "hidden",
+          flexShrink: 0,
+          background: "rgba(255,255,255,0.04)",
+        }}
+      >
+        <img
+          src={snap.image || ""}
+          alt={snap.destination || "Booking"}
+          onError={(e) => {
+            e.target.src =
+              "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Hunza_Valley_Pakistan.jpg/800px-Hunza_Valley_Pakistan.jpg";
+          }}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      </div>
+
+      {/* Title + meta */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 3,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: "'Playfair Display', serif",
+              fontSize: 17,
+              fontWeight: 600,
+              color: C.offWhite,
+            }}
+          >
+            {snap.destination || "Trip"}
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: "rgba(120,220,180,0.15)",
+              color: "rgb(120,220,180)",
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              border: "1px solid rgba(120,220,180,0.35)",
+              lineHeight: 1.4,
+            }}
+          >
+            Paid
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: C.midGray }}>
+          {snap.origin || "—"}
+          {" · "}
+          {snap.days
+            ? `${snap.days} day${snap.days === 1 ? "" : "s"}`
+            : "—"}
+          {snap.startDate ? ` · departs ${snap.startDate}` : ""}
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: C.midGray,
+            marginTop: 4,
+            fontFamily: "'DM Mono', monospace",
+          }}
+        >
+          {booking.bookingId || ""}
+          {booking.bookingId ? " · " : ""}
+          Booked {bookedOn}
+        </div>
+      </div>
+
+      {/* Amount paid */}
+      <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: "rgb(120,220,180)",
+            fontFamily: "'DM Mono', monospace",
+            marginBottom: 2,
+          }}
+        >
+          {fmt(paidAmount)}
+        </div>
+        <div style={{ fontSize: 11, color: C.midGray }}>paid</div>
+      </div>
+
       <Icon.arrow />
     </div>
   );

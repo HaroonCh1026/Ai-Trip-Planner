@@ -1,7 +1,10 @@
 import { C } from "../../styles/colors";
 import { Icon } from "../../components/Icon";
 
-export default function AdminDashboard({ stats, users, trips, bookings }) {
+// Round 3 (Admin #1): `trips` prop dropped + "Recent Itineraries" widget removed.
+// Aggregate counts (totalTrips, monthlyData, regions) remain — those come from
+// /admin/stats and are anonymized system-health metrics, not per-user trip data.
+export default function AdminDashboard({ stats, users, bookings }) { // eslint-disable-line no-unused-vars
   const { totalUsers=0, activeTrips=0, aiCalls=0, revenue="PKR 0", userGrowth=0, tripGrowth=0, proUsers=0, regions=[], monthlyData=[] } = stats;
 
   const statCards = [
@@ -75,32 +78,19 @@ export default function AdminDashboard({ stats, users, trips, bookings }) {
         </div>
       </div>
 
-      {/* Recent Activity */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-        <div className="card" style={{ padding: 24 }}>
-          <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, marginBottom: 16 }}>Recent Users</h3>
-          {users.slice(0, 5).map((u) => (
-            <div key={u.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{u.name}</div>
-                <div style={{ fontSize: 12, color: C.midGray }}>{u.email}</div>
-              </div>
-              <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 4, background: u.plan === "pro" ? "rgba(50,180,50,0.15)" : "rgba(255,255,255,0.05)", color: u.plan === "pro" ? "#5CCC5C" : C.midGray }}>{u.plan === "pro" ? "Pro" : "Free"}</span>
+      {/* Recent Activity — Round 3 (Admin #1): "Recent Itineraries" widget removed.
+          "Recent Users" promoted to full width. */}
+      <div className="card" style={{ padding: 24 }}>
+        <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, marginBottom: 16 }}>Recent Users</h3>
+        {users.slice(0, 5).map((u) => (
+          <div key={u.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>{u.name}</div>
+              <div style={{ fontSize: 12, color: C.midGray }}>{u.email}</div>
             </div>
-          ))}
-        </div>
-        <div className="card" style={{ padding: 24 }}>
-          <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, marginBottom: 16 }}>Recent Itineraries</h3>
-          {trips.slice(0, 5).map((t) => (
-            <div key={t._id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{t.destination}</div>
-                <div style={{ fontSize: 12, color: C.midGray }}>{t.origin} · {t.days} days</div>
-              </div>
-              <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 4, background: t.status === "completed" ? "rgba(50,180,50,0.15)" : "rgba(140,50,50,0.12)", color: t.status === "completed" ? "#5CCC5C" : C.crimson }}>{t.status}</span>
-            </div>
-          ))}
-        </div>
+            <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 4, background: u.plan === "pro" ? "rgba(50,180,50,0.15)" : "rgba(255,255,255,0.05)", color: u.plan === "pro" ? "#5CCC5C" : C.midGray }}>{u.plan === "pro" ? "Pro" : "Free"}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

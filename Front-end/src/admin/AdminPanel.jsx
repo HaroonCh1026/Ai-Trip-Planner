@@ -13,7 +13,7 @@ import AdminSidebar from "./AdminSidebar";
 import AdminHeader from "./AdminHeader";
 import AdminDashboard from "./dashboard/AdminDashboard";
 import AdminUsers from "./users/AdminUsers";
-import AdminTrips from "./trips/AdminTrips";
+// Round 3 (Admin #1): AdminTrips removed — admin no longer sees user trips.
 import AdminBookings from "./bookings/AdminBookings";
 import AdminSupport from "./support/AdminSupport";
 import AdminBlogs from "./blogs/AdminBlogs";
@@ -25,7 +25,6 @@ import AdminMLAnalytics from "./ml-analytics/AdminMLAnalytics";
 const VALID_TABS = [
   "dashboard",
   "users",
-  "trips",
   "bookings",
   "support",
   "blogs",
@@ -38,7 +37,6 @@ const VALID_TABS = [
 export default function AdminPanel({
   user,
   onLogout,
-  onViewTrip,
   aiConfig, // eslint-disable-line no-unused-vars
   setAiConfig, // eslint-disable-line no-unused-vars
 }) {
@@ -59,7 +57,7 @@ export default function AdminPanel({
   };
 
   const [users, setUsers] = useState([]);
-  const [trips, setTrips] = useState([]);
+  // Round 3 (Admin #1): trips state removed — admin no longer sees user trips.
   const [bookings, setBookings] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [blogs, setBlogs] = useState([]);
@@ -81,17 +79,16 @@ export default function AdminPanel({
 
   const load = async () => {
     try {
-      const [s, u, t, b, tk, bl] = await Promise.all([
+      // Round 3 (Admin #1): /admin/trips fetch removed — admin no longer sees user trips.
+      const [s, u, b, tk, bl] = await Promise.all([
         api.get("/admin/stats"),
         api.get("/admin/users"),
-        api.get("/admin/trips"),
         api.get("/admin/bookings"),
         api.get("/admin/support"),
         api.get("/admin/blogs"),
       ]);
       setStats(s.data.data);
       setUsers(u.data.data.users);
-      setTrips(t.data.data.trips);
       const bData = b.data.data;
       setBookings(bData.bookings);
       setBookingMeta({
@@ -136,7 +133,6 @@ export default function AdminPanel({
                 <AdminDashboard
                   stats={stats}
                   users={users}
-                  trips={trips}
                   bookings={bookings}
                 />
               }
@@ -149,10 +145,7 @@ export default function AdminPanel({
               path="users"
               element={<AdminUsers users={users} setUsers={setUsers} />}
             />
-            <Route
-              path="trips"
-              element={<AdminTrips trips={trips} onViewTrip={onViewTrip} />}
-            />
+            {/* Round 3 (Admin #1): /admin/trips route removed — falls through to "*" below which redirects to /admin. */}
             <Route
               path="bookings"
               element={

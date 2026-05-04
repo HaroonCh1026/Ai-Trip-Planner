@@ -50,9 +50,18 @@ export const resetPassword = async (token, password) => {
   return response.data;
 };
 
-// ─── Stripe Payment API Functions (NEW - Round 8) ─────────────────────────
+// ─── Stripe Payment API Functions ─────────────────────────────────────────
 export const createCheckoutSession = async () => {
   const response = await api.post("/payments/create-checkout-session");
+  return response.data;
+};
+
+// Round 5 (#3): Stripe checkout for booking a trip (one-time payment).
+// Backend pre-creates a Pending Booking row, returns the Stripe URL we
+// redirect the user to. On payment success the webhook flips the booking
+// to Paid; PaymentSuccess page then routes to /booking/:id/confirmed.
+export const createTripCheckout = async (tripId) => {
+  const response = await api.post("/payments/create-trip-checkout", { tripId });
   return response.data;
 };
 

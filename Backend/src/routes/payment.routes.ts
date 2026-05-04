@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import {
   createCheckoutSession,
+  createTripCheckoutSession,
   getSubscriptionStatus,
   cancelSubscription,
 } from '../controllers/payment.controller';
@@ -14,6 +15,9 @@ router.use(authenticate);
 
 // Create a Stripe checkout session for upgrading to Pro
 router.post('/create-checkout-session', createCheckoutSession);
+
+// Round 5 (#3): create a Stripe checkout session for booking a trip
+router.post('/create-trip-checkout', createTripCheckoutSession);
 
 // Get current user's subscription status
 router.get('/subscription-status', getSubscriptionStatus);

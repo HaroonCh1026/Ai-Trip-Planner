@@ -4,7 +4,7 @@ import { Icon } from "../components/Icon";
 const NAV_ITEMS = [
   { id: "dashboard",    icon: <Icon.sparkle />, label: "Dashboard" },
   { id: "users",        icon: <Icon.user />,    label: "Users" },
-  { id: "trips",        icon: <Icon.map />,     label: "Trip Analytics" },
+  // Round 3 (Admin #1): Trips entry removed — admin no longer sees user trips.
   { id: "bookings",     icon: <Icon.dollar />,  label: "Bookings" },
   { id: "support",      icon: <Icon.shield />,  label: "Support Tickets" },
   { id: "blogs",        icon: <Icon.sparkle />, label: "Blog Management" },

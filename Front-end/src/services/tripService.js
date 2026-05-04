@@ -67,23 +67,7 @@ export const tripService = {
     return res.json();
   },
 
-  // ── Refine an existing itinerary (Round 7, Pro feature) ──────────────────
-  async refineItinerary(tripId, instruction) {
-    const res = await fetch(`${BASE}/ai/refine`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ tripId, instruction }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      const message = err.message || 'Failed to refine itinerary';
-      const error = new Error(message);
-      error.status = res.status;
-      throw error;
-    }
-    const result = await res.json();
-    return result.data.trip;
-  },
+  // ── Refinement removed in Round 3 (issue #2) ────────────────────────────
 
   // ── Get insider insights for a trip (Day 4 Msg 2, Pro feature) ───────────
   // First call generates them (~10s, hits Gemini). Subsequent calls return

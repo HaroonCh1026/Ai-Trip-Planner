@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { C } from "../styles/colors";
 import { Icon } from "../components/Icon";
-import api, { createCheckoutSession } from "../api/client";
+import api, { createCheckoutSession, cancelSubscription } from "../api/client";
+import ConfirmModal from "../components/ui/ConfirmModal";
 
 // /uploads/... is served by the backend, not Vite. Resolve relative URLs
 // against the API origin. data: URLs and absolute URLs (Google profile pics,
@@ -40,6 +41,32 @@ export default function ProfilePage({
   const [pwOk, setPwOk] = useState(false);
   const [pwSaving, setPwSaving] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  // Round 4 (#7b): cancel-subscription state. confirm-modal pattern follows
+  // the rest of the codebase (Dashboard uses ConfirmModal too).
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelMessage, setCancelMessage] = useState("");
+  const [cancelError, setCancelError] = useState("");
+
+  // Round 3 (issue #9): sync local avatar state with the user prop.
+  //
+  // Why this is needed:
+  //   On a hard refresh, App.jsx loads user from localStorage and immediately
+  //   fires GET /auth/me to refresh it. If /auth/me resolves AFTER ProfilePage
+  //   has already mounted, the parent's `user` prop changes but this
+  //   component's local `avatar` state — initialised once via useState — would
+  //   stay stale. The render uses `avatar` (local state), so the avatar
+  //   appears to "disappear" on refresh until the user clicks Edit Profile
+  //   (which forces a re-mount).
+  //
+  // The effect listens to user.avatar and writes it back into local state,
+  // but only when we're NOT mid-upload (otherwise it would clobber the
+  // optimistic blob: preview the upload handler set).
+  useEffect(() => {
+    if (saving) return;
+    setAvatar(user.avatar || "");
+  }, [user.avatar, saving]);
+
   const [prefs, setPrefs] = useState({
     nature: true,
     culture: true,
@@ -134,6 +161,42 @@ export default function ProfilePage({
     }
   };
 
+  // Round 4 (#7b): cancel subscription handler.
+  // Calls /payments/cancel-subscription. The backend downgrades the user
+  // to "free" plan and clears planExpires, but returns null data. We
+  // optimistically update the local user state so the UI re-renders
+  // immediately as "Free Tier" without needing a manual refresh.
+  // ConfirmModal closes itself via onClose after running this — no need
+  // to setShowCancelConfirm(false) at the top.
+  const handleCancelSubscription = async () => {
+    setCancelling(true);
+    setCancelError("");
+    setCancelMessage("");
+    try {
+      const response = await cancelSubscription();
+      if (response.success) {
+        const msg = response.message || "Subscription cancelled successfully.";
+        setCancelMessage(msg);
+        // Backend doesn't return a user object — apply the downgrade locally.
+        // The user is now on free plan; clear planExpires.
+        const updatedUser = { ...user, plan: "free", planExpires: null };
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+        if (onUserUpdate) onUserUpdate(updatedUser);
+        setTimeout(() => setCancelMessage(""), 6000);
+      } else {
+        setCancelError(response.message || "Could not cancel subscription.");
+      }
+    } catch (err) {
+      console.error("Cancel subscription error:", err);
+      setCancelError(
+        err.response?.data?.message ||
+          "Something went wrong cancelling your subscription. Please try again or contact support."
+      );
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const handlePwChange = async () => {
     setPwErr("");
     setPwOk(false);
@@ -195,6 +258,22 @@ export default function ProfilePage({
           user={user}
           onClose={() => setShowUpgrade(false)}
           onUserUpdate={onUserUpdate}
+        />
+      )}
+
+      {/* Round 4 (#7b): cancel-subscription confirm modal */}
+      {showCancelConfirm && (
+        <ConfirmModal
+          confirm={{
+            title: "Cancel Pro subscription?",
+            message:
+              "You'll lose access to unlimited itineraries, PDF export, Insider Tips, and other Pro features. You can re-upgrade anytime.",
+            confirmLabel: "Yes, cancel subscription",
+            cancelLabel: "Keep Pro plan",
+            destructive: true,
+            onConfirm: handleCancelSubscription,
+          }}
+          onClose={() => setShowCancelConfirm(false)}
         />
       )}
 
@@ -964,18 +1043,88 @@ export default function ProfilePage({
                     </div>
                   ))}
                 </div>
-                {isPro ? (
+                {/* Round 4 (#7b): cancel-subscription feedback messages.
+                    Rendered OUTSIDE the isPro/!isPro branch so they survive
+                    the plan-flip after a successful cancel — otherwise the
+                    success toast would unmount immediately. */}
+                {cancelMessage && (
                   <div
                     style={{
-                      padding: "12px 16px",
-                      background: "rgba(50,180,50,0.1)",
+                      padding: "10px 14px",
+                      background: "rgba(50,180,50,0.08)",
                       border: "1px solid rgba(50,180,50,0.3)",
-                      borderRadius: 8,
-                      fontSize: 13,
+                      borderRadius: 6,
+                      fontSize: 12,
                       color: "#5CCC5C",
+                      marginBottom: 12,
                     }}
                   >
-                    ✓ Pro plan active — enjoy unlimited AI-powered itineraries!
+                    {cancelMessage}
+                  </div>
+                )}
+                {cancelError && (
+                  <div
+                    role="alert"
+                    style={{
+                      padding: "10px 14px",
+                      background: "rgba(200,50,50,0.1)",
+                      border: "1px solid rgba(200,50,50,0.4)",
+                      borderRadius: 6,
+                      fontSize: 12,
+                      color: "#FF8080",
+                      marginBottom: 12,
+                    }}
+                  >
+                    {cancelError}
+                  </div>
+                )}
+
+                {isPro ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div
+                      style={{
+                        padding: "12px 16px",
+                        background: "rgba(50,180,50,0.1)",
+                        border: "1px solid rgba(50,180,50,0.3)",
+                        borderRadius: 8,
+                        fontSize: 13,
+                        color: "#5CCC5C",
+                      }}
+                    >
+                      ✓ Pro plan active — enjoy unlimited AI-powered itineraries!
+                    </div>
+
+                    <button
+                      onClick={() => setShowCancelConfirm(true)}
+                      disabled={cancelling}
+                      style={{
+                        alignSelf: "flex-start",
+                        padding: "9px 16px",
+                        background: "transparent",
+                        border: "1px solid rgba(255,255,255,0.15)",
+                        borderRadius: 6,
+                        color: C.midGray,
+                        fontSize: 12,
+                        fontFamily: "'DM Sans', sans-serif",
+                        cursor: cancelling ? "not-allowed" : "pointer",
+                        opacity: cancelling ? 0.5 : 1,
+                        transition: "all 0.15s",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!cancelling) {
+                          e.currentTarget.style.color = "#FF8080";
+                          e.currentTarget.style.borderColor = "rgba(200,50,50,0.4)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!cancelling) {
+                          e.currentTarget.style.color = C.midGray;
+                          e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+                        }
+                      }}
+                    >
+                      {cancelling ? "Cancelling…" : "Cancel subscription"}
+                    </button>
                   </div>
                 ) : (
                   <button

@@ -1,10 +1,14 @@
 // src/pages/PaymentCancel.jsx
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { C } from "../styles/colors";
-import { Icon } from "../components/Icon";
 
 export default function PaymentCancel() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Round 5 (#3): differentiate copy based on which flow was cancelled.
+  const flowType = searchParams.get("type") || "subscription";
+  const isBooking = flowType === "booking";
 
   return (
     <div
@@ -43,7 +47,9 @@ export default function PaymentCancel() {
           Payment Cancelled
         </h1>
         <p style={{ color: C.midGray, fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
-          Your payment was cancelled. No charges were made. You can continue with the Free plan or try upgrading again.
+          {isBooking
+            ? "Your booking was not completed. No charges were made — you can return to your itinerary and try again whenever you're ready."
+            : "Your payment was cancelled. No charges were made. You can continue with the Free plan or try upgrading again."}
         </p>
         <div style={{ display: "flex", gap: 12 }}>
           <button
@@ -55,10 +61,10 @@ export default function PaymentCancel() {
           </button>
           <button
             className="btn-secondary"
-            onClick={() => navigate("/profile")}
+            onClick={() => navigate(isBooking ? "/dashboard" : "/profile")}
             style={{ flex: 1 }}
           >
-            Try Again
+            {isBooking ? "Browse Trips" : "Try Again"}
           </button>
         </div>
       </div>

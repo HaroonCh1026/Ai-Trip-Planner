@@ -7,7 +7,6 @@ import ItineraryHero from "../components/itinerary/ItineraryHero";
 import ItinerarySummary from "../components/itinerary/ItinerarySummary";
 import DaySidebar from "../components/itinerary/DaySidebar";
 import DayDetails from "../components/itinerary/DayDetails";
-import RefinePanel from "../components/itinerary/RefinePanel";
 import PdfExportButton from "../components/itinerary/PdfExportButton";
 import CostComparisonPanel from "../components/itinerary/CostComparisonPanel";
 import FeasibilityWarnings from "../components/itinerary/FeasibilityWarnings";
@@ -22,7 +21,7 @@ export default function ItineraryView({ trip, onBack }) {
   const [loading, setLoading] = useState(false);
 
   // Read user from localStorage (kept in sync by AuthPage / ProfilePage).
-  // Refinement and PDF export availability depends on user.plan === 'pro'.
+  // PDF export availability depends on user.plan === 'pro'.
   const user = (() => {
     try { return JSON.parse(localStorage.getItem("user") || "null"); }
     catch { return null; }
@@ -81,15 +80,7 @@ export default function ItineraryView({ trip, onBack }) {
     );
   }
 
-  // Callback from RefinePanel after a successful refine — receives the
-  // updated trip from the API and we swap it into local state. We also clamp
-  // activeDay in case the new itinerary has fewer days than the old one.
-  const handleTripUpdated = (updatedTrip) => {
-    setFullTrip(updatedTrip);
-    if (updatedTrip.itinerary && activeDay >= updatedTrip.itinerary.length) {
-      setActiveDay(0);
-    }
-  };
+  // Refinement callback removed in Round 3 (issue #2).
 
   return (
     <div style={{ minHeight: "100vh", background: C.nearBlack }}>
@@ -149,7 +140,7 @@ export default function ItineraryView({ trip, onBack }) {
           </div>
         )}
 
-        {/* Day 4: Book This Trip CTA — appears between day grid and refinement.
+        {/* Day 4: Book This Trip CTA — appears between day grid and insider tips.
             Component handles the entire two-step flow (preview → confirm) and
             navigates to the confirmation page on success. */}
         {days.length > 0 && <BookTripButton trip={fullTrip} />}
@@ -166,22 +157,13 @@ export default function ItineraryView({ trip, onBack }) {
           />
         )}
 
-        {/* Round 7: conversational refinement panel — Pro feature */}
-        {days.length > 0 && (
-          <RefinePanel
-            trip={fullTrip}
-            isPro={isPro}
-            onTripUpdated={handleTripUpdated}
-            onUpgradeClick={() => navigate("/profile?tab=billing")}
-          />
-        )}
+        {/* Round 3 (issue #2): RefinePanel removed. */}
 
         {/* ── Hidden PDF export target ────────────────────────────────────
          * Rendered off-screen so users never see it, but html2canvas can
          * rasterize it. Contains the trip header + every day in sequence
          * so the PDF includes the FULL itinerary, not just whichever day
-         * is active in the sidebar. RefinePanel is intentionally excluded
-         * — users don't want refinement UI in their printed itinerary. */}
+         * is active in the sidebar. */}
         {days.length > 0 && (
           <div
             id="itinerary-pdf-target"

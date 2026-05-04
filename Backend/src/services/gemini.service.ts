@@ -105,6 +105,11 @@ const buildPrompt = async (input: TripGenerationInput): Promise<string> => {
 
     // Vehicle-class style rules — these change the SHAPE of the itinerary,
     // not just the cost. Categorized into 4 patterns and selected by id.
+    //
+    // Round 6 fix: branch order is SPECIFIC → GENERIC. Previously the
+    // `id.includes('private')` catch-all matched `coaster_private` first,
+    // making the dedicated coaster branch unreachable. Now coaster_private
+    // is checked BEFORE the generic private-vehicle branch.
     const id = vehicle.id;
     if (id === 'flight_economy') {
       vehicleStyleGuidance =
@@ -113,6 +118,15 @@ const buildPrompt = async (input: TripGenerationInput): Promise<string> => {
         'rest of Day 1 acclimatizing at the destination. Do NOT plan stops ' +
         'between origin and destination — flights are point-to-point. Maximize ' +
         'time AT the destination across the remaining days.';
+    } else if (id === 'coaster_private') {
+      vehicleStyleGuidance =
+        'TRAVEL PATTERN: Group has a private coaster, so the itinerary is ' +
+        'FLEXIBLE but logistics-heavy (more loading time, longer rest stops). ' +
+        'Activities must accommodate a larger group — pick group-friendly ' +
+        'venues (large dhabas, group-tour-friendly attractions, restaurants ' +
+        'that seat 8+). One or two scenic stops are appropriate but not many. ' +
+        'On long transit days, plan 2-3 substantive rest stops (45+ min each) ' +
+        'because large groups need bathroom/meal breaks more often.';
     } else if (id.includes('private') || id === 'suv_private') {
       vehicleStyleGuidance =
         'TRAVEL PATTERN: User has a private vehicle with driver, so the trip ' +
@@ -127,12 +141,6 @@ const buildPrompt = async (input: TripGenerationInput): Promise<string> => {
         'single morning or afternoon block ending at the destination. Do NOT ' +
         'plan roadside stops or detours — the bus does not stop for tourists. ' +
         'Activities begin only AFTER arrival at the destination.';
-    } else if (id === 'coaster_private') {
-      vehicleStyleGuidance =
-        'TRAVEL PATTERN: Group has a private coaster, so the itinerary is ' +
-        'FLEXIBLE but logistics-heavy (more loading time, longer rest stops). ' +
-        'Activities must accommodate a larger group — pick group-friendly ' +
-        'venues. One or two scenic stops are appropriate but not many.';
     }
 
     // Day 5A: include fuel cost transparency for private vehicles. Helps
@@ -157,6 +165,19 @@ const buildPrompt = async (input: TripGenerationInput): Promise<string> => {
       `Round-trip transport cost: PKR ${roundTripCost.toLocaleString()} — ` +
       `use EXACTLY this number for the transport line-item; do not estimate your own.\n` +
       fuelLine +
+      // Round 6: VEHICLE LOCK. Without this, Gemini freely substitutes
+      // "Daewoo / Faisal Movers / Hiace" for transport activities even when
+      // the user picked Coaster (Private) or SUV. This makes the user's
+      // vehicle choice meaningless. Make it explicit and binding.
+      `\nVEHICLE LOCK (mandatory): Every activity that involves transport ` +
+      `between origin and destination MUST use "${vehicle.label}" and ONLY ` +
+      `"${vehicle.label}". Do NOT substitute Daewoo, Faisal Movers, Skyways, ` +
+      `Hiace, intercity bus, taxi, rideshare, or any other transport mode for ` +
+      `the long-distance journey. The activity name in the JSON output must ` +
+      `reference "${vehicle.label}" by name. Local in-city transport (rickshaws, ` +
+      `Careem inside the destination city, hotel airport pickup) is fine — the ` +
+      `lock applies only to the inter-city journey from ${input.origin} to ` +
+      `${input.destination} and back.\n` +
       `${vehicleStyleGuidance}\n`;
   } else {
     // No vehicleId provided — assume intercity shared van (Pakistan default)
@@ -223,12 +244,21 @@ const buildPrompt = async (input: TripGenerationInput): Promise<string> => {
     `(2) reduce paid activities and lean on free/low-cost ones (parks, viewpoints, mosques, bazaars), ` +
     `(3) suggest local eateries instead of premium restaurants.\n`;
 
+  // Round 6: drop the generic local-transport context line when the user
+  // picked a vehicle. Otherwise this line ("HIACE/Coasters for Gilgit-Skardu,
+  // Daewoo/Faisal Movers for M-Tag highways, Indriver/Bykea for metro areas")
+  // competes with the VEHICLE LOCK above and Gemini gets confused — it
+  // sometimes substitutes the named brands for the user's actual choice.
+  // Only show this line when the user did NOT specify a vehicle.
+  const localTransportContextLine = input.vehicleId
+    ? '' // user picked a vehicle — VEHICLE LOCK above governs transport
+    : '- Local transport: HIACE/Coasters for Gilgit-Skardu, Daewoo/Faisal Movers for M-Tag highways, Indriver/Bykea for metro areas.\n';
+
   return `You are a high-level strategic travel architect specializing in the Pakistani landscape. Generate a comprehensive ${days}-day logistical itinerary from ${input.origin} to ${input.destination}.
 All financial figures MUST be strictly in PKR (Pakistani Rupee).
 ${constraintsBlock}${vehicleBlock}${mlCostBlock}${budgetGuidance}
 Travel Context for Pakistan:
-- Local transport: HIACE/Coasters for Gilgit-Skardu, Daewoo/Faisal Movers for M-Tag highways, Indriver/Bykea for metro areas.
-- Connectivity: Mention SCOM for Northern Areas, Zong/Jazz for metros.
+${localTransportContextLine}- Connectivity: Mention SCOM for Northern Areas, Zong/Jazz for metros.
 - Culinary: Recommend authentic regional dishes (e.g., Chapshuro in Hunza, Saag in Punjab, Sajji in Balochistan).
 - Security: Mention M-Tag requirements, motorway protocols, and high-altitude safety.
 
@@ -242,15 +272,39 @@ Travel Parameters:
 
 CRITICAL COST + CONTENT CONSISTENCY RULES (HIGHEST PRIORITY):
 
-A. Each day MUST have RICH, DETAILED content. Every day's "activities" array should contain 5-8 entries covering:
-   - Morning transport / departure / arrival (if applicable)
-   - Breakfast (named restaurant, hotel, or local cafe)
-   - 2-3 sightseeing activities or experiences (named places, attractions, viewpoints)
-   - Lunch (named restaurant or local eatery)
-   - Afternoon activity OR transit to next location
-   - Dinner (named restaurant)
-   - Optional evening activity (night market, cultural show, scenic walk)
-   Do NOT omit meals. Every breakfast, lunch, and dinner gets its own activity entry with realistic cost.
+A. Each day MUST have RICH, DETAILED content. The required entry count depends on the day type:
+
+   DAY-TYPE CLASSIFICATION:
+   - "Transit day" = a day where the traveler is mainly travelling between origin and destination (typically Day 1 outbound and the final return day). On these days, 4-7 hours or more is consumed by the inter-city journey.
+   - "Destination day" = any day spent at or around the target destination, exploring nearby places.
+
+   MINIMUM ENTRIES PER DAY:
+   - DESTINATION DAYS: minimum 11 entries (3 meals + 8 or more activities/places).
+       The 8+ activities should be REAL, NEARBY places that can realistically be
+       visited in one day given travel time between them. Group attractions that
+       are geographically close together. Examples of doable Skardu-area combos
+       per day: Shangrila Resort + Lower Kachura Lake + Upper Kachura + Manthal
+       Buddha Rock + Kharpocho Fort + Sadpara Lake + Cold Desert + Skardu Bazaar.
+       For Hunza-area: Baltit Fort + Altit Fort + Eagle's Nest + Attabad Lake +
+       Hussaini Bridge + Passu Cones viewpoint + Karimabad Bazaar + Hopper
+       Glacier viewpoint.
+   - TRANSIT DAYS: minimum 8 entries (3 meals + 5 transport/rest/arrival entries).
+       Includes departure, en-route meals, 1-2 substantive rest stops at real
+       towns the route passes through (e.g. Mansehra, Naran, Chilas, Multan
+       depending on route), arrival, local transfer, hotel check-in.
+
+   FORMAT FOR EVERY DAY (regardless of type):
+   - Breakfast (named restaurant, hotel, or local cafe) — REQUIRED
+   - Lunch (named restaurant or local eatery) — REQUIRED
+   - Dinner (named restaurant) — REQUIRED
+   - All sightseeing activities or transit/rest stops with named places, addresses, and durations
+
+   ANTI-HALLUCINATION RULE: ONLY include places that genuinely exist and can
+   realistically be visited on that day. Do NOT invent generic attractions
+   ("Hill Viewpoint #2", "Local Photo Spot") to pad the count. If a transit
+   day's route does not pass through enough real stops to hit 8 entries, it
+   is BETTER to have 7 real entries than 8 entries with one fake one. Real
+   over fake, every time.
 
 B. The sum of all "dailyCost" values MUST equal "totalEstimatedCost" exactly. To achieve this:
    1. Allocate round-trip transport across the FIRST and LAST day.

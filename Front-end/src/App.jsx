@@ -403,9 +403,7 @@ function AppInner() {
               <RequireAdmin user={user}>
                 <AdminPanel
                   user={user}
-                  trips={trips}
                   onLogout={handleLogout}
-                  onViewTrip={handleViewTrip}
                   aiConfig={aiConfig}
                   setAiConfig={setAiConfig}
                 />

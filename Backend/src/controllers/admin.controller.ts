@@ -22,7 +22,7 @@ export const getStats = async (_req: AuthRequest, res: Response, next: NextFunct
 
     const [
       totalUsers, totalTrips, usersThisMonth, usersLastMonth,
-      tripsThisMonth, tripsLastMonth, recentTrips, recentUsers,
+      tripsThisMonth, tripsLastMonth, recentUsers,
       proUsers,
     ] = await Promise.all([
       User.countDocuments(),
@@ -31,7 +31,9 @@ export const getStats = async (_req: AuthRequest, res: Response, next: NextFunct
       User.countDocuments({ createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }),
       Trip.countDocuments({ createdAt: { $gte: startOfMonth } }),
       Trip.countDocuments({ createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }),
-      Trip.find().sort({ createdAt: -1 }).limit(5).select('destination origin days createdAt status userId'),
+      // Round 3 (Admin #1): recentTrips removed — admin no longer sees individual user trips.
+      // Aggregate trip counts (totals, monthly chart, regional distribution) remain
+      // since those are anonymized system-health metrics, not per-user trip data.
       User.find().sort({ createdAt: -1 }).limit(5).select('name email createdAt plan'),
       User.countDocuments({ plan: 'pro' }),
     ]);
@@ -81,7 +83,6 @@ export const getStats = async (_req: AuthRequest, res: Response, next: NextFunct
       proUsers,
       regions,
       monthlyData,
-      recentTrips,
       recentUsers,
     });
   } catch (err) { next(err); }
@@ -139,13 +140,7 @@ export const deleteUser = async (req: AuthRequest, res: Response, next: NextFunc
   } catch (err) { next(err); }
 };
 
-export const getAllTrips = async (_req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-  try {
-    // Issue #11: removed .select('-itinerary') — admin needs full itinerary
-    const trips = await Trip.find().sort({ createdAt: -1 }).populate('userId', 'name email');
-    sendSuccess(res, { trips, count: trips.length });
-  } catch (err) { next(err); }
-};
+// Round 3 (Admin #1): getAllTrips removed — admin no longer sees user trips.
 
 export const getAllBookings = async (_req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { generateItinerary, refineItinerary, getInsiderInsights } from '../controllers/ai.controller';
+import { generateItinerary, getInsiderInsights } from '../controllers/ai.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { generateTripSchema } from '../utils/validators';
@@ -15,20 +15,6 @@ const aiExpressLimiter = rateLimit({
   message: {
     success: false,
     message: 'AI generation limit reached (10/hr). Please try again later.',
-  },
-});
-
-// Refinement is more lightweight than full generation but still hits Gemini.
-// Allow more refines per hour than initial generations since pro users may
-// iterate frequently on a single trip.
-const refineLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: 'Refinement limit reached (30/hr). Please try again later.',
   },
 });
 
@@ -56,15 +42,6 @@ router.post(
   aiExpressLimiter,
   validate(generateTripSchema),
   generateItinerary
-);
-
-// POST /api/ai/refine — Pro-only; trip refinement via natural language
-router.post(
-  '/refine',
-  authenticate,
-  arcjetAI,
-  refineLimiter,
-  refineItinerary
 );
 
 // POST /api/ai/insights/:tripId — Pro-only; AI-generated local insider tips.
