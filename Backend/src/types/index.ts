@@ -145,6 +145,12 @@ export interface ITrip extends Document {
   language: string;
   emergencyNumbers?: string;
   status: 'upcoming' | 'completed' | 'cancelled';
+  // ─── Day 3 vehicle-selection step (post-Round 7 persistence fix) ─────────
+  // Captured at trip generation time so re-opens / refinements / analytics
+  // can see what the user originally picked. Optional — older trips and
+  // chat-only flows won't have these.
+  vehicleId?: string;
+  groupSize?: number;
   // ─── Round 7: append-only refinement history ──────────────────────────────
   refinements: ITripRefinement[];
   // ─── Day 2: ML cost prediction snapshot ──────────────────────────────────

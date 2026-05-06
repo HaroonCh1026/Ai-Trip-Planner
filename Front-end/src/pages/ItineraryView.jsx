@@ -13,12 +13,29 @@ import FeasibilityWarnings from "../components/itinerary/FeasibilityWarnings";
 import WhyUsPanel from "../components/itinerary/WhyUsPanel";
 import BookTripButton from "../components/itinerary/BookTripButton";
 import InsiderTipsPanel from "../components/itinerary/InsiderTipsPanel";
+import ConfirmModal from "../components/ui/ConfirmModal";
 
 export default function ItineraryView({ trip, onBack }) {
   const navigate = useNavigate();
   const [activeDay, setActiveDay] = useState(0);
   const [fullTrip, setFullTrip] = useState(trip);
   const [loading, setLoading] = useState(false);
+  // Upgrade-prompt modal state. Used by Pro-gated CTAs (PDF export, Insider
+  // Tips panel) so Free users get a clear upgrade prompt before being
+  // redirected to the billing tab. Without this, the CTA click would jump
+  // the user away from the page abruptly.
+  const [upgradeConfirm, setUpgradeConfirm] = useState(null);
+
+  // Helper: build a confirm-modal payload for any Pro-gated feature.
+  const promptUpgrade = (featureName) => {
+    setUpgradeConfirm({
+      title: `${featureName} is a Pro feature`,
+      message: `Upgrade to Pro to unlock ${featureName.toLowerCase()} and all other Pro benefits including unlimited trips and exclusive Insider Tips.`,
+      confirmLabel: "Upgrade Now",
+      cancelLabel: "Maybe Later",
+      onConfirm: () => navigate("/profile?tab=billing"),
+    });
+  };
 
   // Read user from localStorage (kept in sync by AuthPage / ProfilePage).
   // PDF export availability depends on user.plan === 'pro'.
@@ -86,7 +103,13 @@ export default function ItineraryView({ trip, onBack }) {
     <div style={{ minHeight: "100vh", background: C.nearBlack }}>
       <ItineraryHero trip={fullTrip} onBack={onBack} />
 
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 5% 60px" }}>
+      <div
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "0 clamp(16px, 5vw, 48px) 60px",
+        }}
+      >
         {/* PDF export button — top-right, above the summary. Only shown when
             we actually have content to export. */}
         {days.length > 0 && (
@@ -95,7 +118,7 @@ export default function ItineraryView({ trip, onBack }) {
               trip={fullTrip}
               isPro={isPro}
               targetId="itinerary-pdf-target"
-              onUpgradeClick={() => navigate("/profile?tab=billing")}
+              onUpgradeClick={() => promptUpgrade("PDF Export")}
             />
           </div>
         )}
@@ -122,6 +145,7 @@ export default function ItineraryView({ trip, onBack }) {
           </div>
         ) : (
           <div
+            className="vai-day-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "280px 1fr",
@@ -153,7 +177,7 @@ export default function ItineraryView({ trip, onBack }) {
           <InsiderTipsPanel
             trip={fullTrip}
             isPro={isPro}
-            onUpgradeClick={() => navigate("/profile?tab=billing")}
+            onUpgradeClick={() => promptUpgrade("Insider Tips")}
           />
         )}
 
@@ -627,6 +651,14 @@ export default function ItineraryView({ trip, onBack }) {
           </div>
         )}
       </div>
+
+      {/* Pro-feature upgrade prompt. Shown when a Free user clicks a
+          Pro-gated CTA (PDF export, Insider Tips). The modal closes itself
+          on either button click; "Upgrade Now" routes to the billing tab. */}
+      <ConfirmModal
+        confirm={upgradeConfirm}
+        onClose={() => setUpgradeConfirm(null)}
+      />
     </div>
   );
 }

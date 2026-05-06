@@ -148,7 +148,8 @@ function AppInner() {
             "",
             authUser.isAdmin ? "/admin" : "/dashboard",
           );
-          _doLogin(authUser, false);
+          // Direct login from magic link or OAuth — no need to fetch trips here since
+          _doLogin(authUser, true);
         })
         .catch(() => {
           localStorage.removeItem("token");

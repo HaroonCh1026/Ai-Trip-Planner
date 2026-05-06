@@ -6,25 +6,17 @@ import { tripService } from "../services/tripService";
 import TripHeader from "../components/trip/TripHeader";
 import TripProgress from "../components/trip/TripProgress";
 import ChatList from "../components/trip/ChatList";
-import ChatInput from "../components/trip/ChatInput";
+import ChoicePicker from "../components/trip/ChoicePicker";
 import ReviewSummary from "../components/trip/ReviewSummary";
 import VehicleSelectStep from "../components/trip/VehicleSelectStep";
 import { Icon } from "../components/Icon";
 
 export default function TripCreator({ user, appConfig, onBack, onComplete }) {
   // ── Conversation state ──────────────────────────────────────────────────
-  // `phase` controls what the user sees:
-  //   "chat"      — answering chatbot questions
-  //   "review"    — looking at the final review screen, can edit any answer
-  //   "generating"— Gemini is running, loader visible
-  //
-  // We model the chat as a list of messages plus a parallel `answers` map.
-  // Going back means popping the last user-message + assistant-message pair
-  // off `messages`, decrementing currentQ, and clearing that key from answers.
   const [messages, setMessages] = useState([
     {
       from: "bot",
-      text: "Hi! I'll help you plan a trip across Pakistan in just a few quick questions. Ready when you are — let's start with the basics.",
+      text: "Hi! I'll help you plan a trip across Pakistan in just a few quick taps. No typing needed — just tap your choices below.",
     },
     {
       from: "bot",
@@ -32,13 +24,12 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
     },
   ]);
   const [currentQ, setCurrentQ] = useState(0);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(""); // kept for the "retry on error" fallback path
   const [answers, setAnswers] = useState({});
   const [phase, setPhase] = useState("chat"); // "chat" | "review" | "generating"
   const [genStep, setGenStep] = useState(0);
   const [error, setError] = useState(null);
 
-  // Day 6: free trip limit is admin-editable via Pricing Controls; defaults to 5.
   const FREE_LIMIT = appConfig?.freeTripLimit ?? 5;
   const tripsUsed = user?.tripsUsed || 0;
   const isLimitHit = user?.plan === "free" && tripsUsed >= FREE_LIMIT;
@@ -52,7 +43,7 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
     "Finalizing your itinerary...",
   ];
 
-  // ── AI response transformer (unchanged from before) ────────────────────
+  // ── AI response transformer (unchanged) ────────────────────────────────
   const mapActivityType = (type) => {
     if (type === "dining") return "restaurant";
     if (type === "leisure") return "activity";
@@ -94,18 +85,41 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
       currency: aiData.currency || "Pakistani Rupee (PKR)",
       language: aiData.language || "Urdu/English",
       emergencyNumbers: aiData.emergencyNumbers || "15 (Police), 1122 (Medical)",
-      // Day 2: ML cost prediction snapshot (optional — present only if the
-      // Python ML service was online when generation ran). The backend
-      // attaches this in ai.controller.ts after Gemini returns. We pass it
-      // through here so it ends up on the saved Trip document and the
-      // itinerary view can render the cost validation panel.
       mlPrediction: aiData.mlPrediction || null,
-      // Day 3: feasibility report (optional — present only if validator
-      // found timing/distance issues). Kept on the trip so subsequent
-      // visits to the itinerary view re-render the warnings without
-      // re-running the validator.
       feasibility: aiData.feasibility || null,
     };
+  };
+
+  // ── Format the picker's raw value as a friendly user chat bubble ───────
+  // Keeps the UX feeling like a real conversation. The raw value still goes
+  // into `answers` so the backend payload is unchanged.
+  const formatAnswerForChat = (questionId, rawValue) => {
+    if (!rawValue) return rawValue;
+    switch (questionId) {
+      case "origin":
+        return `Starting from: ${rawValue}`;
+      case "destination":
+        return `Going to: ${rawValue}`;
+      case "days":
+        return `${rawValue} day${rawValue === "1" ? "" : "s"}`;
+      case "startDate":
+        try {
+          return `Departure: ${new Date(rawValue + "T00:00:00").toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })}`;
+        } catch {
+          return `Departure: ${rawValue}`;
+        }
+      case "budget":
+        return `Budget: PKR ${Number(rawValue).toLocaleString()}`;
+      case "preferences":
+        return `Interests: ${rawValue}`;
+      default:
+        return rawValue;
+    }
   };
 
   // ── Free-limit upgrade wall (unchanged) ────────────────────────────────
@@ -147,15 +161,21 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
   }
 
   // ── Step forward: store answer, move to next question (or review screen) ─
-  const handleSend = async () => {
-    if (!input.trim() || phase !== "chat") return;
-    const userMsg = input.trim();
+  // Now accepts an optional value from the GUI picker. Falls back to `input`
+  // so any legacy code path that calls handleSend() still works.
+  const handleSend = async (valueFromPicker) => {
+    if (phase !== "chat") return;
+    const raw = valueFromPicker !== undefined ? valueFromPicker : input;
+    const userMsg = String(raw || "").trim();
+    if (!userMsg) return;
+
     setInput("");
 
     const q = CHATBOT_QUESTIONS[currentQ];
     if (!q) return;
 
-    // Quick "retry" hook from earlier behavior — keep it for the failure case
+    // "retry" hook from earlier behavior — only reachable via the legacy
+    // typing path now, but keep it for safety.
     if (userMsg.toLowerCase() === "retry" && error) {
       setError(null);
       setMessages((m) => [...m, { from: "bot", text: `Let's try again. ${q.question}` }]);
@@ -164,16 +184,19 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
 
     const newAnswers = { ...answers, [q.id]: userMsg };
     setAnswers(newAnswers);
-    setMessages((m) => [...m, { from: "user", text: userMsg }]);
+
+    // Friendly chat-bubble formatting (e.g. "Budget: PKR 150,000")
+    setMessages((m) => [
+      ...m,
+      { from: "user", text: formatAnswerForChat(q.id, userMsg) },
+    ]);
 
     if (currentQ < CHATBOT_QUESTIONS.length - 1) {
-      // More questions to ask
       await new Promise((r) => setTimeout(r, 400));
       const next = CHATBOT_QUESTIONS[currentQ + 1];
       setMessages((m) => [...m, { from: "bot", text: next.question }]);
       setCurrentQ((c) => c + 1);
     } else {
-      // Last question answered — go to review screen instead of immediate generate
       await new Promise((r) => setTimeout(r, 400));
       setMessages((m) => [
         ...m,
@@ -186,32 +209,20 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
     }
   };
 
-  // ── Special-step submit (Day 3): vehicle picker ──────────────────────────
-  // Special chatbot questions (currently just the vehicle picker) render
-  // their own UI inline in ChatList instead of using the text input bar.
-  // When the user clicks the step's Continue button, this handler fires —
-  // it stores BOTH `vehicleId` and `groupSize` in the answers map and
-  // advances to the next question, mirroring handleSend's flow.
+  // ── Special-step submit (vehicle picker — unchanged) ───────────────────
   const handleSpecialSubmit = async (payload) => {
     if (phase !== "chat") return;
     const q = CHATBOT_QUESTIONS[currentQ];
     if (!q || q.type !== "special") return;
 
-    // Merge the multi-field payload into answers. The `vehicle` slot itself
-    // gets a human-readable summary so the review screen can show it nicely.
     const newAnswers = {
       ...answers,
       vehicleId: payload.vehicleId,
       groupSize: payload.groupSize,
-      // Slot for ReviewSummary's display logic — ID-to-label mapping kept in
-      // the constants module. We resolve it lazily here to avoid yet another
-      // import in the review component.
       vehicle: payload.vehicleId,
     };
     setAnswers(newAnswers);
 
-    // Add a synthetic user-bubble in the chat so the conversation reads
-    // naturally ("you said: Hiace Van for a family of 4").
     const groupLabel =
       payload.groupSize === 1
         ? "Just me"
@@ -242,20 +253,12 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
   };
 
   // ── Step back: pop the last Q/A pair and re-ask the previous question ──
-  // The chat state has: [intro, Q0, A0, Q1, A1, Q2, ...]. After the user
-  // has answered Q0 and we've shown Q1, popping back means removing A0 and Q1
-  // and decrementing currentQ. We also clear that key from answers.
   const handleStepBack = () => {
-    if (currentQ === 0) return; // can't go back from first question
+    if (currentQ === 0) return;
     const prevQ = CHATBOT_QUESTIONS[currentQ - 1];
 
-    // Remove the latest assistant question + the user's previous answer.
-    // We always added them in pairs after Q0, so popping 2 messages is correct.
     setMessages((m) => m.slice(0, -2));
 
-    // Clear the previous answer so the user can edit it from scratch.
-    // Special steps store multiple fields under different keys — for the
-    // vehicle step that's vehicleId + groupSize + vehicle (the display alias).
     setAnswers((a) => {
       const copy = { ...a };
       if (prevQ.type === "special" && prevQ.id === "vehicle") {
@@ -268,26 +271,22 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
       return copy;
     });
 
-    // Restore the input to whatever the user had typed before, so they can
-    // tweak it instead of retyping from zero (only relevant for text steps)
-    if (prevQ.type !== "special") {
-      setInput(answers[prevQ.id] || "");
-    } else {
-      setInput("");
-    }
+    // We no longer need to seed the input box for the GUI flow — the
+    // ChoicePicker hydrates from `answers[prevQ.id]` directly. Clear it
+    // anyway so the legacy retry path starts clean.
+    setInput("");
 
     setCurrentQ((c) => c - 1);
     setError(null);
   };
 
-  // ── Edit a single answer from the review screen ────────────────────────
+  // ── Edit a single answer from the review screen (unchanged) ────────────
   const handleEditField = (fieldId, newValue) => {
     setAnswers((a) => ({ ...a, [fieldId]: newValue }));
   };
 
-  // ── Cancel review and go back to chat (re-asks the last question) ──────
+  // ── Cancel review and go back to chat (unchanged) ──────────────────────
   const handleReviewCancel = () => {
-    // Drop the last bot "review" message, drop the last user answer
     setMessages((m) => m.slice(0, -2));
     setAnswers((a) => {
       const copy = { ...a };
@@ -298,7 +297,7 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
     setPhase("chat");
   };
 
-  // ── Confirm review: actually call Gemini ───────────────────────────────
+  // ── Confirm review: actually call Gemini (unchanged) ───────────────────
   const handleReviewConfirm = async () => {
     setPhase("generating");
     setError(null);
@@ -310,7 +309,6 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
       },
     ]);
 
-    // Walk through visual loader stages
     for (let i = 0; i < genSteps.length; i++) {
       setGenStep(i);
       await new Promise((r) => setTimeout(r, 700));
@@ -327,8 +325,10 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
         budget: parseInt(answers.budget || 0),
         startDate: answers.startDate,
         dates: `${answers.startDate} · ${answers.days} days`,
+        ...(answers.vehicleId ? { vehicleId: answers.vehicleId } : {}),
+        ...(answers.groupSize ? { groupSize: parseInt(answers.groupSize) } : {}),
         image: (() => {
-          const dest = answers.destination.toLowerCase();
+          const dest = (answers.destination || "").toLowerCase();
           const found = DESTINATIONS.find(
             (d) =>
               dest.includes(d.name.toLowerCase()) ||
@@ -346,11 +346,9 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
         currency: transformedData.currency,
         language: transformedData.language,
         emergencyNumbers: transformedData.emergencyNumbers,
-        // Day 2: persist ML prediction onto the trip (or null if ML was offline)
         ...(transformedData.mlPrediction
           ? { mlPrediction: transformedData.mlPrediction }
           : {}),
-        // Day 3: persist feasibility report onto the trip (or omit if no issues)
         ...(transformedData.feasibility
           ? { feasibility: transformedData.feasibility }
           : {}),
@@ -374,9 +372,6 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
         return;
       }
 
-      // Generation failed — return the user to the review screen so they can
-      // tweak inputs and try again, rather than dropping them back at the
-      // chat which would require re-typing everything.
       setError(msg);
       setMessages((m) => [
         ...m,
@@ -414,9 +409,7 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
           genSteps={genSteps}
         />
 
-        {/* Day 3: special chatbot steps render their dedicated UI inline.
-            Currently just the vehicle picker. Sits between chat history and
-            either the review screen or the input bar at the bottom. */}
+        {/* Vehicle picker — unchanged */}
         {phase === "chat" &&
           CHATBOT_QUESTIONS[currentQ]?.type === "special" &&
           CHATBOT_QUESTIONS[currentQ]?.id === "vehicle" && (
@@ -426,7 +419,7 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
             />
           )}
 
-        {/* Review screen — appears between chat history and input area */}
+        {/* Review screen */}
         {phase === "review" && (
           <ReviewSummary
             answers={answers}
@@ -437,15 +430,14 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
         )}
       </div>
 
-      {/* Input only shown during chat phase */}
+      {/* GUI picker (replaces the old ChatInput) */}
       {phase === "chat" && (
-        <ChatInput
-          input={input}
-          setInput={setInput}
+        <ChoicePicker
           onSend={handleSend}
           onBack={handleStepBack}
           error={error}
           currentQ={currentQ}
+          answers={answers}
           generating={false}
         />
       )}

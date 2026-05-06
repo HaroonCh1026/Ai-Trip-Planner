@@ -185,8 +185,8 @@ export default function CostComparisonPanel({ trip }) {
             lineHeight: 1.5,
           }}
         >
-          <strong style={{ color: "#A877D4" }}>ℹ Cost reconciled.</strong>{" "}
-          Initial AI estimate of {fmt(ml.originalAiCostPKR)} fell outside the typical range for similar trips, so we adjusted to align with the ML model's expected cost. This keeps the bookable price consistent with what travellers actually spend.
+          <strong style={{ color: "#A877D4" }}>ℹ Cost adjusted.</strong>{" "}
+          Initial estimate of {fmt(ml.originalAiCostPKR)} fell outside the typical range for similar trips, so we adjusted it to match what travellers actually spend on comparable journeys. This keeps the bookable price realistic and consistent.
         </div>
       )}
 

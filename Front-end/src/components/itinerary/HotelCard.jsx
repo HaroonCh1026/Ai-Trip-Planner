@@ -2,20 +2,22 @@ import { C } from "../../styles/colors";
 import { Icon } from "../Icon";
 
 export default function HotelCard({ hotel }) {
+  const accent = "#5CCC5C";
+
   return (
     <div
       style={{
-        marginTop: 32,
-        padding: "24px",
-        background: "rgba(50,180,50,0.07)",
-        border: "1px solid rgba(50,180,50,0.2)",
+        marginTop: 28,
+        padding: "22px 24px",
+        background: "rgba(50,180,50,0.06)",
+        border: "1px solid rgba(50,180,50,0.22)",
         borderRadius: 12,
       }}
     >
       <div
         style={{
           display: "flex",
-          gap: 12,
+          gap: 14,
           alignItems: "flex-start",
         }}
       >
@@ -24,29 +26,36 @@ export default function HotelCard({ hotel }) {
             background: "rgba(50,180,50,0.15)",
             padding: 10,
             borderRadius: 8,
-            color: "#5CCC5C",
+            color: accent,
             flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           <Icon.hotel />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
               fontFamily: "'DM Mono', monospace",
               fontSize: 11,
-              color: "#5CCC5C",
-              marginBottom: 4,
+              color: accent,
+              marginBottom: 6,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
             }}
           >
-            ACCOMMODATION
+            Accommodation
           </div>
           <div
             style={{
               fontFamily: "'Playfair Display', serif",
-              fontSize: 18,
+              fontSize: 19,
               fontWeight: 600,
-              marginBottom: 4,
+              marginBottom: 8,
+              lineHeight: 1.25,
+              color: C.offWhite,
             }}
           >
             {hotel.name}
@@ -54,19 +63,29 @@ export default function HotelCard({ hotel }) {
           <div
             style={{
               display: "flex",
-              gap: 16,
+              gap: 14,
               flexWrap: "wrap",
+              rowGap: 6,
+              alignItems: "center",
             }}
           >
-            <span style={{ fontSize: 13, color: C.midGray }}>
-              <Icon.location style={{ display: "inline" }} />{" "}
-              {hotel.location || hotel.price}
+            <span
+              style={{
+                fontSize: 13,
+                color: C.midGray,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <Icon.location /> {hotel.location || ''}
             </span>
             <span
               style={{
                 fontSize: 13,
                 fontWeight: 600,
-                color: "#5CCC5C",
+                color: accent,
+                fontFamily: "'DM Mono', monospace",
               }}
             >
               {hotel.price || hotel.priceRange}
@@ -75,7 +94,8 @@ export default function HotelCard({ hotel }) {
               <span
                 style={{
                   fontSize: 13,
-                  display: "flex",
+                  color: "rgba(232,232,232,0.85)",
+                  display: "inline-flex",
                   alignItems: "center",
                   gap: 4,
                 }}
@@ -88,9 +108,9 @@ export default function HotelCard({ hotel }) {
             <p
               style={{
                 fontSize: 12,
-                color: C.midGray,
-                marginTop: 8,
-                lineHeight: 1.6,
+                color: "rgba(232,232,232,0.75)",
+                marginTop: 10,
+                lineHeight: 1.65,
               }}
             >
               {hotel.why}
@@ -100,13 +120,14 @@ export default function HotelCard({ hotel }) {
             href={`https://www.google.com/maps/search/${encodeURIComponent(hotel.name)}`}
             target="_blank"
             rel="noopener noreferrer"
+            className="vai-focusable"
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              marginTop: 10,
+              marginTop: 12,
               fontSize: 12,
-              color: "#5CCC5C",
+              color: accent,
               textDecoration: "none",
               fontWeight: 500,
             }}

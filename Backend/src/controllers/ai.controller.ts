@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import { generateTripItinerary, generateInsiderInsights } from '../services/gemini.service';
+import { generateTripItinerary, generateInsiderInsights, applyVehicleOverrides } from '../services/gemini.service';
 import { predictTripCost, buildMLInputFromTrip } from '../services/mlService';
 import { validateItineraryFeasibility, FeasibilityReport } from '../utils/feasibilityValidator';
 import { sendSuccess, sendError } from '../utils/response';
@@ -8,6 +8,8 @@ import User from '../models/User';
 import Trip from '../models/Trip';
 import config from '../config/config';
 import { getEffectiveConfig } from '../services/adminConfig.service';
+import { getVehicle, computeTransportCost } from '../utils/vehicleOptions';
+import { getRoute } from '../services/routingService';
 
 // ─── POST /api/ai/generate ─────────────────────────────────────────────────
 // Gate: free users capped at FREE_TRIP_LIMIT (default 5). Pro users unlimited.
@@ -66,6 +68,15 @@ export const generateItinerary = async (
     //   5. If Gemini still drifts (rare), we apply a gentle TOTAL-only fallback
     //
     // ML being unavailable is fine — generation falls back to old behaviour.
+    //
+    // Group-size fix (post-Round 6): forward groupSize from the request body
+    // so the ML model's `group_size` feature reflects reality (was defaulting
+    // to 2 for everyone, which made solo trips inflated and family trips
+    // under-priced from ML's perspective).
+    const groupSizeNum = Math.max(
+      1,
+      Number((input as TripGenerationInput).groupSize) || 1
+    );
     const mlInput = buildMLInputFromTrip({
       origin: input.origin,
       destination: input.destination,
@@ -73,6 +84,7 @@ export const generateItinerary = async (
       budget: input.budget,
       startDate: input.startDate,
       preferences: input.preferences,
+      groupSize: groupSizeNum,
     });
 
     let preflightPrediction: Awaited<ReturnType<typeof predictTripCost>> = null;
@@ -82,6 +94,72 @@ export const generateItinerary = async (
       } catch {
         // ML service down — generate without the constraint. App stays alive.
         preflightPrediction = null;
+      }
+    }
+
+    // ─── Group-size fix Layer B: defensive ML scaling ─────────────────────
+    // The synthetic training dataset has weak group-size signal (groupSize=1
+    // and 2 average ~PKR 72k–76k; 3 and 4 jump to ~PKR 140k; 5 and 6 sit
+    // around ~PKR 200k — stair-stepped, not linear). The model picks up the
+    // direction but undershoots magnitude.
+    //
+    // Real-world per-additional-person cost is roughly +60–80% of solo (each
+    // extra person needs their own meals, tickets, partial hotel share). We
+    // enforce a floor multiplier so a family of 4 doesn't get a couple's
+    // ML target. The multiplier is applied to the SOLO-anchor (predicted /
+    // datasetGroupSize) rather than the predicted total directly, so we
+    // don't double-scale.
+    //
+    // Future Work: retrain on real booking data with linear scaling. Until
+    // then, this guards against unrealistic family-trip targets reaching
+    // Gemini's prompt.
+    if (preflightPrediction) {
+      // The dataset's de-facto solo cost (from ML training); we anchor on
+      // groupSize=1 because that's the cleanest baseline. We extract it by
+      // back-computing from the predicted value at whatever group size we
+      // sent. This is rough but acceptable — the band-aid is intentional.
+      const minMultiplier =
+        groupSizeNum === 1 ? 1.0
+        : groupSizeNum === 2 ? 1.5
+        : groupSizeNum === 3 ? 2.2
+        : groupSizeNum === 4 ? 2.8
+        : groupSizeNum === 5 ? 3.4
+        : 4.0; // 6+ people
+
+      // Reverse-engineer the solo anchor from the dataset's stair-step.
+      // Empirically: dataset means at sizes 1..6 are roughly 72k, 76k, 139k,
+      // 142k, 227k, 205k. We use a piecewise inverse to recover what the
+      // model "thinks" a solo trip in this region+season would cost, then
+      // re-scale by minMultiplier.
+      const datasetMultiplier =
+        groupSizeNum === 1 ? 1.0
+        : groupSizeNum === 2 ? 1.05
+        : groupSizeNum === 3 ? 1.93
+        : groupSizeNum === 4 ? 1.97
+        : groupSizeNum === 5 ? 3.15
+        : 2.85; // 6+ — use the 6 mean
+
+      const soloAnchor = preflightPrediction.predicted_cost_pkr / datasetMultiplier;
+      const flooredPredicted = soloAnchor * minMultiplier;
+
+      // Only scale UP, never down. If the model already predicted higher
+      // than our floor (unlikely but possible for premium destinations),
+      // trust the model's signal.
+      if (flooredPredicted > preflightPrediction.predicted_cost_pkr) {
+        const oldPredicted = preflightPrediction.predicted_cost_pkr;
+        const ratio = flooredPredicted / oldPredicted;
+        preflightPrediction = {
+          ...preflightPrediction,
+          predicted_cost_pkr: Math.round(flooredPredicted),
+          low_pkr: Math.round(preflightPrediction.low_pkr * ratio),
+          high_pkr: Math.round(preflightPrediction.high_pkr * ratio),
+        };
+        console.info(
+          `[ai.controller] Group-size floor applied for groupSize=${groupSizeNum}: ` +
+          `predicted PKR ${oldPredicted.toLocaleString()} → ` +
+          `PKR ${Math.round(flooredPredicted).toLocaleString()} ` +
+          `(min mult ${minMultiplier}x of solo anchor)`
+        );
       }
     }
 
@@ -99,6 +177,262 @@ export const generateItinerary = async (
     }
 
     const result = await generateTripItinerary(input);
+
+    // ── Hotel price normalization (post-Round 7 fix) ──────────────────────
+    // Symptom: hotel.price comes back inconsistent — sometimes "PKR 10,111/
+    // night", sometimes bare "20062", sometimes "PKR 81,079/night". Frontend
+    // renders it verbatim, so different trips display the same field
+    // differently. Daily reconciliation only normalized when its scaling
+    // factor was non-1; in the common case where Gemini already hit the ML
+    // target, no normalization ran.
+    //
+    // Fix: always normalize hotel.price to "PKR X,XXX/night" format right
+    // after Gemini returns. Idempotent — re-running it on already-normalized
+    // strings is safe (parser strips non-digits, formatter rebuilds).
+    try {
+      if (Array.isArray(result?.days)) {
+        for (const day of result.days) {
+          if (!day?.hotel || typeof day.hotel !== 'object') continue;
+          const raw = (day.hotel as { price?: unknown; pricePerNight?: unknown }).price
+                    ?? (day.hotel as { price?: unknown; pricePerNight?: unknown }).pricePerNight;
+          if (raw == null || raw === '') continue;
+          const num = Number(String(raw).replace(/[^\d]/g, ''));
+          if (Number.isFinite(num) && num > 0) {
+            (day.hotel as { price: string }).price = `PKR ${num.toLocaleString()}/night`;
+          }
+        }
+      }
+    } catch (hotelErr) {
+      console.warn(
+        '[ai.controller] Hotel price normalization failed:',
+        (hotelErr as Error).message
+      );
+    }
+
+    // ── Transport cost redistribution (post-Round 7 fix) ───────────────────
+    // Symptom: every "<vehicle> (Private) Departure / Continues / towards X"
+    // activity comes back from Gemini with cost: 0. Reason: the vehicle prompt
+    // tells Gemini the round-trip transport cost as a single number, but
+    // Gemini splits the journey into 4-9 sub-legs and doesn't know how to
+    // distribute the lump sum. So it writes 0 on the legs and the daily
+    // reconciliation later inflates meal costs to absorb the gap (PKR 13,757
+    // for a roadside lunch, etc.).
+    //
+    // Fix: walk the itinerary, find every transit leg that names the user's
+    // vehicle AND has cost 0, then distribute the round-trip transport cost
+    // across them proportionally by duration (in hours). This way:
+    //   - Long highway stretches carry more cost than short town segments
+    //   - Total still equals the round-trip number Gemini was told to use
+    //   - Meal/hotel costs stay realistic
+    //   - The downstream reconciliation only handles small residual gaps
+    //
+    // No-op when: no vehicleId, no transit legs found, or every leg already
+    // has a non-zero cost (Gemini got it right on its own).
+    try {
+      const vId = (input as TripGenerationInput).vehicleId;
+      if (vId && Array.isArray(result?.days) && result.days.length > 0) {
+        const seedVehicle = getVehicle(vId);
+        if (seedVehicle) {
+          const adminCfg = await getEffectiveConfig();
+          const vehicle = applyVehicleOverrides(
+            seedVehicle,
+            adminCfg.vehicleOverridesPKR || {},
+            adminCfg.flightRouteOverridesPKR || {}
+          );
+          const route = await getRoute(input.origin, input.destination).catch(() => null);
+          const distance = route?.kmRoad ?? 500;
+          const totalTransportCost = computeTransportCost({
+            vehicle,
+            distanceKm: distance * 2, // round-trip
+            groupSize: groupSizeNum,
+            routeKey: `${input.origin}-${input.destination}`.toLowerCase(),
+          });
+
+          // Step 1: collect every transit leg that mentions the vehicle label.
+          // Match is case-insensitive and substring-based — handles "SUV
+          // (Private) Departure from Lahore", "SUV (Private) Continues
+          // Journey", etc. We also match the bare vehicle id as a fallback
+          // (in case Gemini used a slightly different label).
+          const labelLower = vehicle.label.toLowerCase();
+          const idLower = vehicle.id.toLowerCase();
+
+          // Bare-name fragments to also match (e.g. "SUV" alone, "Sedan" alone)
+          // when Gemini drops the parenthetical "(Private)" suffix.
+          // Pulled from the label by stripping " (...)" and lowercasing.
+          const labelBare = vehicle.label.replace(/\s*\([^)]*\)\s*/g, '').trim().toLowerCase();
+
+          // Helper: parse "1.5 hours", "3 hours", "30 minutes", "Full Day"
+          // to a numeric hour value. Returns 0 for "N/A" / unknown formats.
+          const parseDurationHours = (raw: string): number => {
+            if (!raw) return 0;
+            const s = String(raw).toLowerCase().trim();
+            if (s === 'n/a' || s === '') return 0;
+            if (s.includes('full day')) return 8;
+            const hourMatch = s.match(/([\d.]+)\s*hour/);
+            if (hourMatch) return Number(hourMatch[1]) || 0;
+            const minMatch = s.match(/([\d.]+)\s*min/);
+            if (minMatch) return (Number(minMatch[1]) || 0) / 60;
+            return 0;
+          };
+
+          // Transit-keyword set used by the fallback matcher. Gemini sometimes
+          // drops the explicit vehicle name from the title (e.g. "Motorway
+          // Travel towards Islamabad", "Continue Drive towards Chilas",
+          // "Drive towards Skardu via Karakoram Highway"). Those are still
+          // transit legs that should carry vehicle cost — we just can't see
+          // the vehicle name to anchor on.
+          //
+          // To catch those without false-positives on sightseeing, we require
+          // ALL of: cost === 0 + duration ≥ 2 hours + transit keyword in name.
+          // 2-hour threshold keeps out "Brief Stop at Balakot" (30 min),
+          // "Visit Skardu Bazaar" (2h sightseeing — but no transit keyword),
+          // "Explore Kharpocho Fort" (2.5h hike — but no transit keyword).
+          const TRANSIT_KEYWORDS = [
+            'drive', 'driving',
+            'travel', 'travelling', 'traveling',
+            'journey',
+            'depart', 'departure',
+            'motorway',
+            'highway',
+            'kkh', 'karakoram',
+            'route to',
+            'enroute', 'en route',
+            'towards',
+            'via ',
+            'transit',
+          ];
+
+          // Activity types that are EXPLICITLY non-transit. Even if the name
+          // accidentally contains a transit keyword, skip these.
+          const NON_TRANSIT_TYPES = new Set([
+            'meal',
+            'rest_stop',
+            'arrival',
+            'return_to_hotel',
+            'check_in',
+            'checkin',
+            'hotel',
+          ]);
+
+          type TransitLeg = { day: any; activity: any; hours: number };
+          const transitLegs: TransitLeg[] = [];
+
+          // Pre-compute which days already have a "Local 4x4 Jeep Rental" line.
+          // On those days, the user is doing intra-destination off-road driving
+          // in a rented jeep, NOT inter-city transport in their main vehicle.
+          // So a transit-keyword leg on that same day (e.g. "Drive through
+          // Deosai Plains") is the jeep tour, not a sedan leg — we must NOT
+          // pile inter-city sedan cost onto it.
+          //
+          // The vehicle-NAME match still applies on jeep days though, because
+          // some destinations split arrival across the jeep-day (e.g. final
+          // hour of Sedan drive into Skardu on a day that also has an evening
+          // jeep tour). Both can legitimately co-exist.
+          const dayHasJeepRental = (day: any): boolean => {
+            if (!Array.isArray(day?.activities)) return false;
+            for (const a of day.activities) {
+              const n = String(a?.name || '').toLowerCase();
+              if (n.includes('local 4x4') || n.includes('local jeep') ||
+                  (n.includes('jeep rental') && n.includes('local')) ||
+                  n.includes('4x4 jeep rental')) {
+                return true;
+              }
+            }
+            return false;
+          };
+
+          for (const day of result.days) {
+            if (!Array.isArray(day.activities)) continue;
+            const isJeepDay = dayHasJeepRental(day);
+
+            for (const activity of day.activities) {
+              if (!activity || typeof activity.name !== 'string') continue;
+
+              // Only redistribute INTO legs Gemini left at zero. If Gemini
+              // already put a sensible cost on a leg, respect it — overwriting
+              // would risk double-counting against the headline.
+              const currentCost = Number(activity.cost ?? 0);
+              if (currentCost > 0) continue;
+
+              // Skip explicitly non-transit activity types (meals, rest stops,
+              // arrivals, hotel check-ins).
+              const typeLower = String(activity.type || '').toLowerCase();
+              if (NON_TRANSIT_TYPES.has(typeLower)) continue;
+
+              const nameLower = activity.name.toLowerCase();
+              const hours = parseDurationHours(String(activity.duration || ''));
+              if (hours <= 0) continue; // can't weight a 0-duration leg
+
+              // Primary match: vehicle label or id appears in the activity name.
+              // (Reliable when Gemini follows the prompt's naming guidance.)
+              const vehicleNameMatch =
+                nameLower.includes(labelLower) ||
+                nameLower.includes(idLower) ||
+                (labelBare.length >= 3 && nameLower.includes(labelBare));
+
+              // Fallback match: long-duration transit verb but no vehicle name.
+              // Catches "Motorway Travel towards Islamabad", "Continue Drive
+              // towards Chilas", "Drive towards Skardu via KKH". Requires
+              // duration ≥ 2h to filter out "Stop at Balakot" (30min) and
+              // local sightseeing activities.
+              //
+              // CRITICAL: on jeep-rental days, this fallback is DISABLED
+              // because intra-destination off-road drives ("Drive through
+              // Deosai Plains") would otherwise be wrongly classified as
+              // inter-city transit. Vehicle-name match still applies — if
+              // Gemini explicitly named the user's main vehicle on a jeep
+              // day, it's a real inter-city leg.
+              const hasTransitKeyword = TRANSIT_KEYWORDS.some((kw) =>
+                nameLower.includes(kw)
+              );
+              const transitFallbackMatch =
+                !isJeepDay && hasTransitKeyword && hours >= 2;
+
+              if (!vehicleNameMatch && !transitFallbackMatch) continue;
+
+              transitLegs.push({ day, activity, hours });
+            }
+          }
+
+          // Step 2: distribute totalTransportCost across legs by hours.
+          // Floor each share, give the rounding residual to the longest leg
+          // so the sum lands exactly on totalTransportCost.
+          if (transitLegs.length > 0 && totalTransportCost > 0) {
+            const totalHours = transitLegs.reduce((s, l) => s + l.hours, 0);
+            if (totalHours > 0) {
+              let runningTotal = 0;
+              // Sort once descending by hours so the residual lands on the
+              // largest leg (most natural place to hide a few rupees).
+              const sortedDesc = [...transitLegs].sort((a, b) => b.hours - a.hours);
+              for (let i = 0; i < sortedDesc.length; i++) {
+                const leg = sortedDesc[i];
+                const isLast = i === sortedDesc.length - 1;
+                const share = isLast
+                  ? totalTransportCost - runningTotal
+                  : Math.floor((leg.hours / totalHours) * totalTransportCost);
+                leg.activity.cost = Math.max(0, share);
+                runningTotal += share;
+              }
+
+              console.info(
+                `[ai.controller] Transport cost redistributed for ${vehicle.label}: ` +
+                `PKR ${totalTransportCost.toLocaleString()} across ${transitLegs.length} ` +
+                `transit leg(s), totaling ${totalHours.toFixed(1)} hours.`
+              );
+            }
+          }
+        }
+      }
+    } catch (transportErr) {
+      // Non-fatal — if anything fails (route lookup, admin config, parsing),
+      // fall back to the original behavior. The downstream reconciliation
+      // block still runs and will scale meal costs to close the gap, same
+      // as before this fix.
+      console.warn(
+        '[ai.controller] Transport cost redistribution failed:',
+        (transportErr as Error).message
+      );
+    }
 
     // ── Round 2 (Option 2): Daily cost reconciliation ──────────────────────
     // Forces TWO consistencies:

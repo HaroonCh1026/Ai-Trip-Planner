@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { C } from "../../styles/colors";
 import { Icon } from "../Icon";
 
@@ -36,11 +35,34 @@ const activityTypeStyles = {
   },
 };
 
+// Chevron — small inline SVG so we don't need to extend the Icon component.
+function Chevron({ open }) {
+  return (
+    <svg
+      className={`vai-chevron ${open ? "vai-chevron-open" : ""}`}
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 6l4 4 4-4"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function ActivityCard({ activity, dayIndex, activityIndex, isExpanded, onToggle }) {
   const style = activityTypeStyles[activity.type] || activityTypeStyles.activity;
+  const hasDetails = !!(activity.tips || activity.cuisine || activity.why);
 
   return (
-    <div style={{ position: "relative", marginBottom: 20 }}>
+    <div style={{ position: "relative", marginBottom: 18 }}>
       {/* Dot */}
       <div
         style={{
@@ -56,7 +78,16 @@ export default function ActivityCard({ activity, dayIndex, activityIndex, isExpa
       />
 
       <div
-        className="card"
+        className="card vai-focusable"
+        role="button"
+        tabIndex={0}
+        aria-expanded={hasDetails ? isExpanded : undefined}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
         style={{ cursor: "pointer" }}
         onClick={onToggle}
       >
@@ -71,10 +102,13 @@ export default function ActivityCard({ activity, dayIndex, activityIndex, isExpa
           <div
             style={{
               background: style.bg,
-              padding: 8,
+              padding: 9,
               borderRadius: 8,
               color: style.color,
               flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
             {style.icon}
@@ -85,16 +119,17 @@ export default function ActivityCard({ activity, dayIndex, activityIndex, isExpa
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "flex-start",
-                gap: 8,
+                gap: 12,
               }}
             >
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                   style={{
                     fontFamily: "'DM Mono', monospace",
                     fontSize: 11,
                     color: C.midGray,
-                    marginBottom: 3,
+                    marginBottom: 4,
+                    letterSpacing: "0.04em",
                   }}
                 >
                   {activity.time}
@@ -103,7 +138,8 @@ export default function ActivityCard({ activity, dayIndex, activityIndex, isExpa
                   style={{
                     fontWeight: 600,
                     fontSize: 15,
-                    lineHeight: 1.3,
+                    lineHeight: 1.35,
+                    color: C.offWhite,
                   }}
                 >
                   {activity.name}
@@ -112,7 +148,7 @@ export default function ActivityCard({ activity, dayIndex, activityIndex, isExpa
                   style={{
                     fontSize: 12,
                     color: C.midGray,
-                    marginTop: 3,
+                    marginTop: 4,
                     display: "flex",
                     alignItems: "center",
                     gap: 4,
@@ -123,55 +159,62 @@ export default function ActivityCard({ activity, dayIndex, activityIndex, isExpa
               </div>
               <div
                 style={{
-                  textAlign: "right",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-end",
+                  gap: 6,
                   flexShrink: 0,
                 }}
               >
-                {activity.cost && (
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: C.offWhite,
-                    }}
-                  >
-                    PKR {activity.cost}
-                  </div>
-                )}
-                {activity.duration && (
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: C.midGray,
-                    }}
-                  >
-                    {activity.duration}
-                  </div>
-                )}
+                <div style={{ textAlign: "right" }}>
+                  {activity.cost && (
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: C.offWhite,
+                        fontFamily: "'DM Mono', monospace",
+                      }}
+                    >
+                      PKR {activity.cost}
+                    </div>
+                  )}
+                  {activity.duration && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: C.midGray,
+                      }}
+                    >
+                      {activity.duration}
+                    </div>
+                  )}
+                </div>
+                {hasDetails && <Chevron open={isExpanded} />}
               </div>
             </div>
           </div>
         </div>
 
-        {isExpanded && (activity.tips || activity.cuisine || activity.why) && (
+        {isExpanded && hasDetails && (
           <div
             style={{
               padding: "0 20px 16px 20px",
               borderTop: "1px solid rgba(255,255,255,0.06)",
             }}
           >
-            <div style={{ paddingTop: 12 }}>
+            <div style={{ paddingTop: 14 }}>
               {activity.tips && (
                 <div
                   style={{
                     fontSize: 13,
-                    color: C.midGray,
+                    color: "rgba(232,232,232,0.85)",
                     lineHeight: 1.7,
                   }}
                 >
                   <span
                     style={{
-                      color: C.crimson,
+                      color: C.crimsonLight,
                       fontWeight: 600,
                     }}
                   >
@@ -184,7 +227,8 @@ export default function ActivityCard({ activity, dayIndex, activityIndex, isExpa
                 <div
                   style={{
                     fontSize: 13,
-                    color: C.midGray,
+                    color: "rgba(232,232,232,0.85)",
+                    lineHeight: 1.7,
                     marginTop: 6,
                   }}
                 >
@@ -203,7 +247,8 @@ export default function ActivityCard({ activity, dayIndex, activityIndex, isExpa
                 <div
                   style={{
                     fontSize: 13,
-                    color: C.midGray,
+                    color: "rgba(232,232,232,0.85)",
+                    lineHeight: 1.7,
                     marginTop: 6,
                   }}
                 >
@@ -222,13 +267,14 @@ export default function ActivityCard({ activity, dayIndex, activityIndex, isExpa
                 href={`https://www.google.com/maps/search/${encodeURIComponent(activity.name + " " + activity.location)}`}
                 target="_blank"
                 rel="noopener noreferrer"
+                className="vai-focusable"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 6,
-                  marginTop: 10,
+                  marginTop: 12,
                   fontSize: 12,
-                  color: C.crimson,
+                  color: C.crimsonLight,
                   textDecoration: "none",
                   fontWeight: 500,
                 }}

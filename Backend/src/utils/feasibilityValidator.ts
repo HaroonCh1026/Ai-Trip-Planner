@@ -56,6 +56,11 @@ interface ItineraryActivity {
   name?: string;
   location?: string;
   duration?: string;
+  // Round 7: Gemini already populates `type` for every activity ('meal',
+  // 'transport', 'activity', 'arrival', etc.). The feasibility validator
+  // now uses it to decide whether overlap is genuinely a problem (e.g.
+  // a "meal en route" overlapping with a long bus ride is expected).
+  type?: string;
 }
 
 interface ItineraryDay {
@@ -107,6 +112,94 @@ function parseDurationToHours(durStr: string | undefined): number {
 
 // ─── Validators ─────────────────────────────────────────────────────────────
 
+// ─── Round 7: noise filters ──────────────────────────────────────────────
+//
+// The validator was over-warning on two patterns common in Round 6+ output:
+//   1. "Lunch en route" / "Breakfast on the go" inside long bus rides — these
+//      overlap with the ride by design, not by mistake.
+//   2. Vague location strings like "Local eatery near Upper Kachura Lake" or
+//      "Mansehra Bypass (tentative)" — Geoapify either can't resolve them or
+//      resolves to wildly wrong coordinates, producing nonsense like
+//      "33.4 hours" travel time. Better to silently skip than mislead.
+
+const VAGUE_LOCATION_HINTS = [
+  '(tentative)',
+  'tentative',
+  'en route',
+  'on the go',
+  'highway stop',
+  'service area',
+  'bypass',
+  'rest stop',
+  'rest area',
+  'viewpoint',
+  'view point',
+  'bus stop',
+  'bus terminal',
+  'check-in',
+  'check in',
+  'security',
+  'arrival',
+  'departure',
+  'local eatery',
+  'highway dhaba',
+];
+
+function isVagueLocation(loc: string | undefined): boolean {
+  if (!loc) return true;
+  const s = loc.toLowerCase();
+  return VAGUE_LOCATION_HINTS.some((hint) => s.includes(hint));
+}
+
+function isConsumedDuringTransit(activity: ItineraryActivity): boolean {
+  // A meal/snack/rest-stop type activity that explicitly happens during a
+  // larger transit window. We detect it from either:
+  //   - activity.type === 'meal' (set by Gemini), OR
+  //   - activity.name contains "en route", "on the go", "highway", "rest stop",
+  //     "tea stop", "snacks", "stretch", "refreshment".
+  const t = (activity.type || '').toLowerCase();
+  const n = (activity.name || '').toLowerCase();
+  if (t === 'meal' || t === 'snack' || t === 'rest') return true;
+  if (
+    n.includes('en route') ||
+    n.includes('on the go') ||
+    n.includes('highway') ||
+    n.includes('rest stop') ||
+    n.includes('tea stop') ||
+    n.includes('snack') ||
+    n.includes('stretch') ||
+    n.includes('refresh')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isLongHaulTransit(activity: ItineraryActivity): boolean {
+  // A transit leg that consumes most of a day — buses, flights, drives
+  // labeled with "from <city> to <city>".
+  const t = (activity.type || '').toLowerCase();
+  const n = (activity.name || '').toLowerCase();
+  if (t === 'transport' || t === 'transit' || t === 'arrival' || t === 'departure') {
+    return true;
+  }
+  // Names like "Intercity Bus from Lahore to Skardu", "PIA Flight from ..."
+  if (
+    /\bfrom\s+[a-z]+\s+to\s+[a-z]+/.test(n) &&
+    (n.includes('bus') ||
+      n.includes('flight') ||
+      n.includes('drive') ||
+      n.includes('coaster') ||
+      n.includes('hiace') ||
+      n.includes('van') ||
+      n.includes('jeep') ||
+      n.includes('taxi'))
+  ) {
+    return true;
+  }
+  return false;
+}
+
 async function checkConsecutiveActivities(
   prev: ItineraryActivity,
   next: ItineraryActivity,
@@ -130,11 +223,19 @@ async function checkConsecutiveActivities(
   const prevDuration = parseDurationToHours(prev.duration);
   const availableHours = nextTime - (prevTime + prevDuration);
 
+  // Round 7 — Fix B: meals and rest stops happen *during* long transit legs
+  // by design. Don't flag them as overlap. Specifically: if one of the pair
+  // is a long-haul transit and the other is a "consumed during transit"
+  // activity, the overlap is expected and we suppress the warning.
+  const transitMealOverlap =
+    (isLongHaulTransit(prev) && isConsumedDuringTransit(next)) ||
+    (isLongHaulTransit(next) && isConsumedDuringTransit(prev));
+
   // Only flag GENUINE overlaps (>30 min of overlap). Micro-overlaps and
   // zero-gap transitions are usually fine — they happen when Gemini ends one
   // activity at 13:00 and starts the next at 13:00 (which is what real
   // schedules look like). We give half an hour of grace before complaining.
-  if (availableHours < -0.5) {
+  if (availableHours < -0.5 && !transitMealOverlap) {
     return {
       day: dayNumber,
       severity: 'warning',
@@ -148,10 +249,28 @@ async function checkConsecutiveActivities(
   // (Prev check already handled negative; this catches the zero case.)
   if (availableHours <= 0) return null;
 
+  // Round 7 — Fix C: skip routing lookup if either location is "vague" —
+  // strings like "Local eatery near Upper Kachura Lake" or "Mansehra Bypass
+  // (tentative)" don't geocode reliably. Geoapify either fails or matches
+  // some unrelated POI thousands of km away, producing nonsense like
+  // "33.4 hour drives". Better to silently skip than mislead the user.
+  if (isVagueLocation(prev.location) || isVagueLocation(next.location)) {
+    return null;
+  }
+
   // Hybrid lookup — Geoapify, curated, dataset, or null
   const requiredHours = await getFastestTravelHours(prev.location, next.location);
   if (requiredHours === null) {
     return null; // no data — skip silently
+  }
+
+  // Round 7 — Sanity cap. No realistic intra-day travel between two
+  // Pakistan locations exceeds ~24h; if we get a number wildly larger
+  // than that, the geocoder is almost certainly matching the wrong
+  // place (e.g. "Local eatery near Kachura" being resolved to a POI
+  // halfway across the world). Refuse to surface a misleading warning.
+  if (requiredHours > 24) {
+    return null;
   }
 
   // Skip the warning if both locations are clearly close to each other
@@ -186,12 +305,15 @@ async function checkConsecutiveActivities(
 
 function checkOverpackedDay(day: ItineraryDay): FeasibilityViolation | null {
   const count = day.activities?.length || 0;
-  if (count >= 9) {
+  // Updated post-Round 6: prompt now asks for 11+ entries on destination days
+  // (3 meals + 8 activities) and 8+ on transit days. Anything below 14 is
+  // by design. We only flag genuinely punishing days.
+  if (count >= 14) {
     return {
       day: day.day,
       severity: 'warning',
       type: 'overpacked_day',
-      message: `Day ${day.day} has ${count} activities scheduled. Most travelers find 5-7 activities per day more enjoyable.`,
+      message: `Day ${day.day} has ${count} activities scheduled — that's a lot to fit comfortably. Consider trimming to leave breathing room.`,
     };
   }
   return null;

@@ -63,9 +63,27 @@ export const generateTripSchema = Joi.object({
     .required()
     .messages({ 'any.required': 'Budget is required' }),
   preferences: Joi.string().max(500).allow('').default('Architecture, Culture, Logistics'),
+  // Day 3 (vehicle picker step) fields. Optional — backend gracefully falls
+  // back to "shared intercity bus" defaults when omitted.
+  //
+  // BUG FIX (post-Round 7): these were missing from the schema, so the
+  // validate middleware (stripUnknown: true) was silently deleting them
+  // from req.body before the controller ran. Result: every trip ignored
+  // the user's picked vehicle (showed "Intercity Bus") AND defaulted to
+  // groupSize=1 regardless of party size, which also bypassed the
+  // group-size cost floor in ai.controller.ts.
+  vehicleId: Joi.string().max(50).optional(),
+  groupSize: Joi.alternatives()
+    .try(Joi.number().integer().min(1).max(20), Joi.string().pattern(/^\d+$/))
+    .optional(),
 });
 
 // ─── Save Trip ─────────────────────────────────────────────────────────────
+// Wired into POST /api/trips via validate() middleware (post-Round 7 fix).
+// Before this, the route had no validation at all, so Mongoose strict mode
+// was the only thing protecting the Trip model. Now we explicitly whitelist
+// every legitimate field and let unknown fields be stripped server-side
+// instead of relying on the model schema as a security boundary.
 export const saveTripSchema = Joi.object({
   destination:     Joi.string().required(),
   origin:          Joi.string().required(),
@@ -84,6 +102,21 @@ export const saveTripSchema = Joi.object({
   emergencyNumbers:Joi.string().allow('').default(''),
   // 'cancelled' added
   status:          Joi.string().valid('upcoming', 'completed', 'cancelled').default('upcoming'),
+  // ── Day 3 vehicle-selection step (post-Round 7 persistence fix) ────────
+  // Persist what the user originally picked so re-opens, refinements, and
+  // admin analytics can see the trip's transport context.
+  vehicleId:       Joi.string().max(50).allow('').default(''),
+  groupSize:       Joi.alternatives()
+                     .try(Joi.number().integer().min(1).max(20), Joi.string().pattern(/^\d+$/))
+                     .default(1),
+  // ── AI-attached snapshots ──────────────────────────────────────────────
+  // These come back from POST /api/ai/generate and the frontend forwards
+  // them to POST /api/trips. The server doesn't trust them blindly — Joi
+  // here just permits the fields through; Mongoose's typed schemas
+  // (mlPredictionSchema, etc.) enforce shape on the model side.
+  mlPrediction:    Joi.object().unknown(true).optional(),
+  feasibility:     Joi.object().unknown(true).optional(),
+  insiderInsights: Joi.object().unknown(true).optional(),
 });
 
 // ─── Update Trip Status ────────────────────────────────────────────────────

@@ -15,7 +15,11 @@ import { getEffectiveConfig } from './adminConfig.service';
 // We never mutate the shared catalog object — clone first, then patch
 // costPerKmPKR and (for flights) merged route prices. Missing overrides
 // just fall through to the seed defaults.
-function applyVehicleOverrides(
+//
+// Exported so ai.controller can use the same vehicle/cost computation when
+// redistributing transport cost across transit legs (post-Round 7 fix for
+// "SUV (Private) cost: 0" rows in the itinerary).
+export function applyVehicleOverrides(
   seed: VehicleOption,
   vehicleOverrides: Record<string, number>,
   flightRouteOverrides: Record<string, number>
@@ -188,6 +192,97 @@ const buildPrompt = async (input: TripGenerationInput): Promise<string> => {
       `direct city-to-city transit, no scenic detours. Group size: ${groupSize}.\n`;
   }
 
+  // ── 4x4-only-route awareness (post-Round 7) ─────────────────────────────
+  // Several Northern destinations have onward routes that NORMAL vehicles
+  // (sedan/coaster/Daewoo/Hiace) physically cannot reach: jeep tracks with
+  // river crossings, broken metalled road, or boulder-strewn stretches.
+  // Examples: Fairy Meadows base camp track, Deosai Plateau, Naltar Valley
+  // upper switchbacks, Phander/Shandur passes, Khaplu valley side roads.
+  //
+  // Even when the user picked a Private SUV (which CAN handle some of these),
+  // Pakistani travel norm is to hire a local jeep + driver for the actual
+  // off-road leg — driver knows the route, owner avoids wear-and-tear, and
+  // the price is calibrated to local economics. So we surface this as a
+  // standing rule whenever the destination touches a known 4x4-required region.
+  //
+  // Rule says: VEHICLE LOCK still binds the inter-city journey (the user's
+  // chosen long-haul transport doesn't change). This rule applies ONLY to
+  // the off-road sub-leg as a SEPARATE activity line on the destination day.
+  //
+  // Why hard-coded list, not a routing API call: Geoapify doesn't classify
+  // road surface. OpenStreetMap tags are inconsistent in northern Pakistan.
+  // A curated list of well-known jeep-required clusters is more reliable.
+  const JEEP_REQUIRED_REGIONS: Array<{
+    match: string[];      // substrings (lowercased) to match against destination
+    routes: string[];     // example off-road clusters within the region
+    pricePKR: [number, number]; // typical full-day jeep rental range
+  }> = [
+    {
+      match: ['skardu', 'shigar', 'khaplu', 'baltistan'],
+      routes: ['Deosai Plateau', 'Sheosar Lake via Deosai', 'Basho Valley', 'Hushe Valley', 'Khaplu side valleys'],
+      pricePKR: [12000, 18000],
+    },
+    {
+      match: ['hunza', 'gilgit', 'nagar', 'gojal', 'karimabad', 'aliabad'],
+      routes: ['Naltar Valley upper lakes', 'Hopar Glacier viewpoint', 'Khunjerab side tracks', 'Chapursan Valley'],
+      pricePKR: [10000, 16000],
+    },
+    {
+      match: ['fairy meadows', 'raikot', 'chilas', 'nanga parbat'],
+      routes: ['Raikot bridge to Tatto village (mandatory jeep leg)', 'Tatto village to Fairy Meadows base'],
+      pricePKR: [8000, 14000],
+    },
+    {
+      match: ['phander', 'shandur', 'ghizer', 'mastuj'],
+      routes: ['Phander Lake access road', 'Shandur Pass top', 'Ghizer Valley upper sections'],
+      pricePKR: [10000, 16000],
+    },
+    {
+      match: ['kalash', 'chitral', 'bumburet', 'rumbur'],
+      routes: ['Bumburet/Rumbur/Birir valley jeep tracks', 'Chitral to Garam Chashma'],
+      pricePKR: [9000, 15000],
+    },
+    {
+      match: ['kaghan', 'naran', 'lalazar', 'lulusar', 'saif ul malook', 'saiful malook'],
+      routes: ['Lake Saif-ul-Malook road (jeep-only beyond Naran)', 'Lalazar plateau', 'Babusar top side roads'],
+      pricePKR: [7000, 12000],
+    },
+  ];
+
+  const destLower = String(input.destination || '').toLowerCase();
+  const matchedRegion = JEEP_REQUIRED_REGIONS.find((r) =>
+    r.match.some((m) => destLower.includes(m))
+  );
+
+  let jeepSwapBlock = '';
+  if (matchedRegion) {
+    const [lo, hi] = matchedRegion.pricePKR;
+    const routesList = matchedRegion.routes.map((r) => `"${r}"`).join(', ');
+    jeepSwapBlock =
+      `\nLOCAL 4x4 JEEP REQUIREMENT (mandatory for off-road legs): The ` +
+      `destination region (${input.destination}) contains routes that REQUIRE ` +
+      `a local 4x4 jeep + driver — normal vehicles physically cannot reach ` +
+      `these spots. Known examples in this region: ${routesList}.\n` +
+      `RULES:\n` +
+      `  1. The VEHICLE LOCK above still binds the INTER-CITY journey ` +
+      `(${input.origin} ↔ ${input.destination}). The user's chosen vehicle ` +
+      `is what gets them in and out of the destination city. Do NOT change that.\n` +
+      `  2. If a day's plan visits any of the off-road clusters listed above ` +
+      `(or any similar jeep-only route in this region), add a SEPARATE activity ` +
+      `line for the local jeep rental on that day. Example name format: ` +
+      `"Local 4x4 Jeep Rental for [route name]" with cost PKR ${lo.toLocaleString()}–${hi.toLocaleString()} ` +
+      `for a full day (driver + fuel included, typical local rate).\n` +
+      `  3. The jeep rental line is ADDITIONAL to the user's main vehicle — ` +
+      `it does NOT replace it. Both vehicles legitimately appear in the ` +
+      `itinerary: main vehicle on transit days, local jeep on off-road excursion days.\n` +
+      `  4. Keep the jeep cost as a separate visible line item (do not ` +
+      `bundle into the activity entry fee). The traveler should see ` +
+      `"Local 4x4 Jeep Rental — PKR X" as its own row.\n` +
+      `  5. If the day's plan stays on metalled roads only (city sights, ` +
+      `viewpoints reachable by sedan), do NOT add a jeep line. Apply this ` +
+      `rule only when off-road access is genuinely needed.\n`;
+  }
+
   // ── Round 2 (Option B): ML-grounded cost guidance ────────────────────
   // The frontend / ai.controller predicts the realistic cost range from
   // a learned ML model BEFORE calling Gemini. We pass that range as a
@@ -220,6 +315,57 @@ const buildPrompt = async (input: TripGenerationInput): Promise<string> => {
       `If your TOTAL falls outside [${mlHint.low.toLocaleString()}, ${mlHint.high.toLocaleString()}] ` +
       `the system will flag the trip as cost-mismatched. Stay within range.\n`;
   }
+
+  // ── Group-size cost rules (mandatory) ─────────────────────────────────
+  // The cost anchors above use "/person" notation. Without this block,
+  // Gemini was writing single-line meal costs (e.g. "Lunch — PKR 600")
+  // regardless of whether the traveler was solo or a family of 6, which
+  // made budget guidance functionally useless for group trips. This rule
+  // forces the multiplication to be visible in the line item.
+  const groupSizeBlock =
+    `\nGROUP-SIZE COST RULES (MANDATORY — applies to every line item):\n` +
+    `Group size: ${groupSize} traveler${groupSize === 1 ? '' : 's'}.\n` +
+    `\n` +
+    `1. PER-PERSON ITEMS — multiply by ${groupSize}:\n` +
+    `   • Meals (breakfast / lunch / dinner) — anchor PKR/person × ${groupSize}\n` +
+    `   • Entry tickets, museum passes, monument fees — anchor × ${groupSize}\n` +
+    `   • Per-pax tour seats, ski-lift tickets, boat-ride seats — anchor × ${groupSize}\n` +
+    `   • Shared/per-seat transport that you DID NOT already account for ` +
+    `in the round-trip line — anchor × ${groupSize}\n` +
+    `\n` +
+    `2. PER-VEHICLE / PER-GROUP ITEMS — DO NOT multiply (already total):\n` +
+    `   • The round-trip transport line above (already total cost)\n` +
+    `   • Private taxi, private van, fuel, parking, tolls\n` +
+    `   • Group day-tours quoted "per group" rather than "per person"\n` +
+    `   • Hotel rooms (see rule 3 — uses room-share math, not multiplication)\n` +
+    `\n` +
+    `3. ACCOMMODATION SCALING (rooms, not bodies):\n` +
+    (groupSize === 1
+      ? `   • Solo: 1 single/standard room. Anchor price as-is.\n`
+      : groupSize === 2
+        ? `   • Couple: 1 double room. Approximately 1.4× single anchor.\n`
+        : groupSize === 3
+          ? `   • Group of 3: 1 family room OR 1 double + 1 single. ~1.8× single anchor.\n`
+          : groupSize === 4
+            ? `   • Family of 4: 1 family suite OR 2 doubles. ~2.0× single anchor.\n`
+            : groupSize === 5
+              ? `   • Group of 5: 2 doubles + 1 single OR 1 family + 1 double. ~2.4× single anchor.\n`
+              : `   • Group of ${groupSize}: ${Math.ceil(groupSize / 2)} double rooms ` +
+                `or family suites. ~${(groupSize / 2.2).toFixed(1)}× single anchor.\n`) +
+    `\n` +
+    `4. FORMATTING REQUIREMENT:\n` +
+    `   For per-person line items, write the line so the multiplication is ` +
+    `visible. Examples:\n` +
+    (groupSize === 1
+      ? `     • "Lunch at Cafe Layla — PKR 600" (solo, no multiplication needed)\n` +
+        `     • "Baltit Fort entry — PKR 500"\n`
+      : `     • "Lunch at Cafe Layla (PKR 600/person × ${groupSize}) — PKR ${600 * groupSize}"\n` +
+        `     • "Baltit Fort entry (PKR 500/person × ${groupSize}) — PKR ${500 * groupSize}"\n`) +
+    `\n` +
+    `5. The "cost" field in JSON output is the TOTAL for the activity ` +
+    `(post-multiplication). Do NOT put per-person cost in the JSON cost ` +
+    `field. The "/person × N" annotation belongs in the activity NAME or ` +
+    `description, not the numeric cost field.\n`;
 
   // ── Day 4 fix: hard budget enforcement instructions ──────────────────
   // The OLD prompt said "Budget: PKR X allocated for mid-range to premium
@@ -256,7 +402,7 @@ const buildPrompt = async (input: TripGenerationInput): Promise<string> => {
 
   return `You are a high-level strategic travel architect specializing in the Pakistani landscape. Generate a comprehensive ${days}-day logistical itinerary from ${input.origin} to ${input.destination}.
 All financial figures MUST be strictly in PKR (Pakistani Rupee).
-${constraintsBlock}${vehicleBlock}${mlCostBlock}${budgetGuidance}
+${constraintsBlock}${vehicleBlock}${jeepSwapBlock}${mlCostBlock}${groupSizeBlock}${budgetGuidance}
 Travel Context for Pakistan:
 ${localTransportContextLine}- Connectivity: Mention SCOM for Northern Areas, Zong/Jazz for metros.
 - Culinary: Recommend authentic regional dishes (e.g., Chapshuro in Hunza, Saag in Punjab, Sajji in Balochistan).
@@ -529,6 +675,15 @@ IMPORTANT: Return ONLY raw JSON. No markdown. No backticks. No explanation. Star
  *
  * Returns a fresh full itinerary — caller is responsible for storing it
  * in the trip's `refinements` history and updating the active itinerary.
+ *
+ * @deprecated Round 3 (Day 7 audit) — the POST /api/ai/refine route was
+ * removed in Round 3 (issue #2 — refinement was producing inconsistent
+ * results that conflicted with the cost-reconciliation pipeline). This
+ * function and its helpers (`buildRefinementPrompt`, `RefinementInput`)
+ * have no remaining call sites in either backend or frontend. Kept in the
+ * file as reference scaffolding for the future "trip refinement" feature
+ * listed in SRS Future Scope, NOT as live production code. Do not call
+ * directly — wire a new controller + route + reconciliation path first.
  */
 export const refineTripItinerary = async (
   input: RefinementInput

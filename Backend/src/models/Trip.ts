@@ -119,6 +119,14 @@ const tripSchema = new Schema<ITrip>(
     dates: { type: String, default: '' },          // "Jun 10 – Jun 16, 2025"
     image: { type: String, default: '' },          // Unsplash URL
 
+    // ── Day 3 vehicle-selection step (post-Round 7 persistence fix) ──────
+    // The user's selected transport for the inter-city leg(s). Optional
+    // because trips generated before vehicle-selection step shipped won't
+    // have it, and because the AI generator gracefully falls back to
+    // shared-bus defaults when missing.
+    vehicleId: { type: String, default: '' },     // 'sedan_private', 'flight_economy', etc.
+    groupSize: { type: Number, default: 1, min: 1, max: 20 }, // party size; drives cost scaling
+
     // ── AI-generated fields ───────────────────────────────────────────────
     itinerary: [itineraryDaySchema],
     summary: { type: String, default: '' },

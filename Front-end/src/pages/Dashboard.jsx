@@ -32,6 +32,8 @@ export default function Dashboard({
     } else {
       setSearchParams({ tab: next }, { replace: false });
     }
+    // UI Round 1: close mobile drawer when a tab is picked
+    setMobileMenuOpen(false);
   };
   const [trips, setTrips] = useState(initialTrips || []);
   const [loading, setLoading] = useState(false);
@@ -40,6 +42,8 @@ export default function Dashboard({
   // Round 5b: paid bookings shown in the History tab.
   const [bookings, setBookings] = useState([]);
   const [bookingsLoading, setBookingsLoading] = useState(false);
+  // UI Round 1: mobile drawer toggle (presentation-only state).
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   if (!user) return null;
 
@@ -167,6 +171,104 @@ export default function Dashboard({
     { id: "profile", icon: <Icon.user />, label: "Profile" },
   ];
 
+  // ─── UI Round 1: small render helpers ─────────────────────────────────
+  // These are pure presentation — they read the same `tabs` array and the
+  // same handler functions. No state shape changes.
+
+  const renderNavTab = (tab, opts = {}) => {
+    const active = activeTab === tab.id;
+    const fullWidth = opts.fullWidth;
+    return (
+      <button
+        key={tab.id}
+        className="vai-nav-tab vai-focusable"
+        onClick={() => setActiveTab(tab.id)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: fullWidth ? "12px 16px" : "8px 14px",
+          borderRadius: 6,
+          background: active ? "rgba(140,50,50,0.2)" : "transparent",
+          border: "none",
+          color: active ? C.crimsonLight : C.midGray,
+          cursor: "pointer",
+          fontSize: 14,
+          fontFamily: "'DM Sans', sans-serif",
+          fontWeight: active ? 600 : 500,
+          width: fullWidth ? "100%" : undefined,
+          justifyContent: fullWidth ? "flex-start" : "center",
+        }}
+      >
+        {tab.icon} <span>{tab.label}</span>
+      </button>
+    );
+  };
+
+  // Stat card with a subtle decorative icon — same data, just presented
+  // with more visual identity per card.
+  const StatCard = ({ label, value, highlight, pro, icon }) => {
+    const accent = highlight ? C.crimsonLight : pro ? "#5CCC5C" : C.offWhite;
+    const border = highlight
+      ? C.crimson
+      : pro
+        ? "rgba(92,204,92,0.45)"
+        : "rgba(255,255,255,0.06)";
+    return (
+      <div
+        className="vai-card-lift"
+        style={{
+          background: C.darkGray,
+          borderRadius: 10,
+          border: `1px solid ${border}`,
+          padding: "20px 22px",
+          position: "relative",
+          overflow: "hidden",
+          minHeight: 92,
+        }}
+      >
+        {icon && (
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              top: 14,
+              right: 14,
+              opacity: 0.3,
+              color: accent,
+              display: "flex",
+            }}
+          >
+            {icon}
+          </div>
+        )}
+        <div
+          style={{
+            fontSize: 28,
+            fontWeight: 700,
+            fontFamily: "'Playfair Display', serif",
+            color: accent,
+            lineHeight: 1.1,
+          }}
+        >
+          {value}
+        </div>
+        <div
+          style={{
+            fontSize: 11,
+            color: C.midGray,
+            marginTop: 6,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            fontFamily: "'DM Mono', monospace",
+          }}
+        >
+          {label}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
     <div style={{ minHeight: "100vh", background: C.nearBlack }}>
@@ -182,8 +284,8 @@ export default function Dashboard({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "0 5%",
-          height: 68,
+          padding: "0 clamp(16px, 5vw, 48px)",
+          height: 64,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -210,31 +312,21 @@ export default function Dashboard({
             Voyageur<span style={{ color: C.crimson }}>AI</span>
           </span>
         </div>
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "8px 14px",
-                borderRadius: 6,
-                background:
-                  activeTab === tab.id ? "rgba(140,50,50,0.2)" : "transparent",
-                border: "none",
-                color: activeTab === tab.id ? C.crimson : C.midGray,
-                cursor: "pointer",
-                fontSize: 14,
-                fontFamily: "'DM Sans', sans-serif",
-                transition: "all 0.2s",
-              }}
-            >
-              {tab.icon} <span>{tab.label}</span>
-            </button>
-          ))}
+
+        {/* Desktop nav cluster */}
+        <div className="vai-desktop-only" style={{ gap: 4, alignItems: "center" }}>
+          {tabs.map((tab) => renderNavTab(tab))}
+          <div
+            aria-hidden
+            style={{
+              width: 1,
+              height: 22,
+              background: "rgba(255,255,255,0.08)",
+              margin: "0 6px",
+            }}
+          />
           <button
+            className="vai-nav-tab vai-focusable"
             onClick={() => onNavigate("support")}
             style={{
               padding: "8px 14px",
@@ -246,13 +338,12 @@ export default function Dashboard({
               fontSize: 14,
               fontFamily: "'DM Sans', sans-serif",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = C.offWhite)}
-            onMouseLeave={(e) => (e.currentTarget.style.color = C.midGray)}
           >
             Support
           </button>
           {user.isAdmin && (
             <button
+              className="vai-focusable"
               onClick={() => onNavigate("admin")}
               style={{
                 display: "flex",
@@ -262,7 +353,7 @@ export default function Dashboard({
                 borderRadius: 6,
                 background: "rgba(224,92,92,0.15)",
                 border: `1px solid ${C.crimson}`,
-                color: C.crimson,
+                color: C.crimsonLight,
                 cursor: "pointer",
                 fontSize: 13,
                 fontWeight: 600,
@@ -273,6 +364,7 @@ export default function Dashboard({
             </button>
           )}
           <button
+            className="vai-nav-tab vai-focusable"
             onClick={onLogout}
             style={{
               background: "transparent",
@@ -284,68 +376,180 @@ export default function Dashboard({
               fontSize: 14,
               fontFamily: "'DM Sans', sans-serif",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#FF8080")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = C.midGray)}
           >
             Logout
           </button>
         </div>
+
+        {/* Mobile hamburger (only visible <=768px) */}
+        <button
+          className="vai-mobile-only vai-focusable"
+          onClick={() => setMobileMenuOpen((v) => !v)}
+          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileMenuOpen}
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color: C.offWhite,
+            width: 40,
+            height: 40,
+            borderRadius: 8,
+            cursor: "pointer",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {mobileMenuOpen ? <Icon.close /> : <Icon.menu />}
+        </button>
       </nav>
 
+      {/* Mobile drawer — appears under nav when hamburger is open */}
+      {mobileMenuOpen && (
+        <div
+          className="vai-mobile-only vai-drawer"
+          style={{
+            position: "sticky",
+            top: 64,
+            zIndex: 49,
+            flexDirection: "column",
+            gap: 4,
+            padding: "12px clamp(16px, 5vw, 48px)",
+            background: "rgba(13,13,13,0.98)",
+            borderBottom: "1px solid rgba(140,50,50,0.2)",
+            backdropFilter: "blur(20px)",
+          }}
+        >
+          {tabs.map((tab) => renderNavTab(tab, { fullWidth: true }))}
+          <div
+            aria-hidden
+            style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "6px 0" }}
+          />
+          <button
+            className="vai-focusable"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              onNavigate("support");
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "12px 16px",
+              borderRadius: 6,
+              background: "transparent",
+              border: "none",
+              color: C.midGray,
+              cursor: "pointer",
+              fontSize: 14,
+              fontFamily: "'DM Sans', sans-serif",
+              textAlign: "left",
+              width: "100%",
+            }}
+          >
+            Support
+          </button>
+          {user.isAdmin && (
+            <button
+              className="vai-focusable"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onNavigate("admin");
+              }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "12px 16px",
+                borderRadius: 6,
+                background: "rgba(224,92,92,0.15)",
+                border: `1px solid ${C.crimson}`,
+                color: C.crimsonLight,
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: "'DM Sans', sans-serif",
+                textAlign: "left",
+                width: "100%",
+              }}
+            >
+              <Icon.shield width="16" height="16" /> Admin Panel
+            </button>
+          )}
+          <button
+            className="vai-focusable"
+            onClick={() => {
+              setMobileMenuOpen(false);
+              onLogout();
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "12px 16px",
+              borderRadius: 6,
+              background: "transparent",
+              border: "none",
+              color: C.midGray,
+              cursor: "pointer",
+              fontSize: 14,
+              fontFamily: "'DM Sans', sans-serif",
+              textAlign: "left",
+              width: "100%",
+            }}
+          >
+            Logout
+          </button>
+        </div>
+      )}
+
       {/* ── Main ── */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "48px 5%" }}>
+      <div
+        style={{
+          maxWidth: 1200,
+          margin: "0 auto",
+          padding: "clamp(28px, 5vw, 48px) clamp(16px, 5vw, 48px)",
+        }}
+      >
         {/* Stats */}
         <div
+          className="vai-stats-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4,1fr)",
-            gap: 16,
-            marginBottom: 48,
+            gap: 14,
+            marginBottom: 40,
           }}
         >
-          {[
-            { label: "Total Trips", value: trips.length },
-            { label: "Upcoming", value: upcomingTrips.length },
-            { label: "Completed", value: completedTrips.length },
-            isPro
-              ? { label: "Plan", value: "Pro ∞", highlight: false, pro: true }
-              : {
-                  label: "Free Trips Left",
-                  value: Math.max(0, freeLeft),
-                  highlight: isLimitHit,
-                },
-          ].map((s) => (
-            <div
-              key={s.label}
-              className="card"
-              style={{
-                padding: "20px 24px",
-                borderColor: s.highlight
-                  ? C.crimson
-                  : s.pro
-                    ? "#5CCC5C"
-                    : undefined,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 28,
-                  fontWeight: 700,
-                  fontFamily: "'Playfair Display', serif",
-                  color: s.highlight
-                    ? C.crimson
-                    : s.pro
-                      ? "#5CCC5C"
-                      : C.offWhite,
-                }}
-              >
-                {s.value}
-              </div>
-              <div style={{ fontSize: 12, color: C.midGray, marginTop: 4 }}>
-                {s.label}
-              </div>
-            </div>
-          ))}
+          <StatCard
+            label="Total Trips"
+            value={trips.length}
+            icon={<Icon.map width="22" height="22" />}
+          />
+          <StatCard
+            label="Upcoming"
+            value={upcomingTrips.length}
+            icon={<Icon.calendar width="22" height="22" />}
+          />
+          <StatCard
+            label="Completed"
+            value={completedTrips.length}
+            icon={<Icon.check width="22" height="22" />}
+          />
+          {isPro ? (
+            <StatCard
+              label="Plan"
+              value="Pro ∞"
+              pro
+              icon={<Icon.crown width="22" height="22" />}
+            />
+          ) : (
+            <StatCard
+              label="Free Trips Left"
+              value={Math.max(0, freeLeft)}
+              highlight={isLimitHit}
+              icon={<Icon.sparkle width="22" height="22" />}
+            />
+          )}
         </div>
 
         {/* ── MY TRIPS TAB ── */}
@@ -357,45 +561,42 @@ export default function Dashboard({
                 alignItems: "center",
                 justifyContent: "space-between",
                 marginBottom: 24,
+                gap: 12,
+                flexWrap: "wrap",
               }}
             >
-              <h2 className="display-heading" style={{ fontSize: 26 }}>
-                My Trips
-              </h2>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <div style={{ minWidth: 0 }}>
+                <p className="section-label" style={{ marginBottom: 6 }}>
+                  Your itineraries
+                </p>
+                <h2
+                  className="display-heading"
+                  style={{ fontSize: 24, lineHeight: 1.15 }}
+                >
+                  My Trips
+                </h2>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
                 {/* Round 5b (#7a updated): direct-to-Stripe upgrade.
                     Bypasses the previous "navigate to profile then click again"
                     UX. Calls /payments/create-checkout-session and redirects
                     to Stripe immediately. Falls back to in-card error message
-                    on failure (e.g., Stripe not configured). */}
+                    on failure (e.g., Stripe not configured).
+                    UI Round 1: replaced loud yellow gradient with a calmer
+                    gold ghost button (.vai-pro-ghost) so it doesn't fight
+                    the primary "Plan New Trip" CTA. */}
                 {!isPro && !isLimitHit && (
                   <button
+                    className="vai-pro-ghost vai-focusable"
                     onClick={handleUpgradeClick}
                     disabled={upgrading}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      padding: "10px 18px",
-                      background: "linear-gradient(135deg, rgba(255,180,0,0.15), rgba(140,50,50,0.15))",
-                      border: `1.5px solid ${C.crimson}`,
-                      borderRadius: 8,
-                      color: "#FFB400",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      fontFamily: "'DM Sans', sans-serif",
-                      cursor: upgrading ? "wait" : "pointer",
-                      opacity: upgrading ? 0.6 : 1,
-                      transition: "all 0.15s",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!upgrading) {
-                        e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,180,0,0.25), rgba(140,50,50,0.25))";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "linear-gradient(135deg, rgba(255,180,0,0.15), rgba(140,50,50,0.15))";
-                    }}
                     title="Get unlimited AI itineraries — PKR 2,500/month"
                   >
                     <Icon.crown />
@@ -403,7 +604,7 @@ export default function Dashboard({
                   </button>
                 )}
                 <button
-                  className="btn-primary"
+                  className="btn-primary vai-focusable"
                   onClick={isLimitHit ? undefined : onCreateTrip}
                   disabled={isLimitHit}
                   title={isLimitHit ? "Upgrade to Pro" : ""}
@@ -437,6 +638,7 @@ export default function Dashboard({
               >
                 <span>⚠ {upgradeError}</span>
                 <button
+                  className="vai-focusable"
                   onClick={() => setUpgradeError("")}
                   style={{
                     background: "transparent",
@@ -485,7 +687,7 @@ export default function Dashboard({
                   </p>
                 </div>
                 <button
-                  className="btn-primary"
+                  className="btn-primary vai-focusable"
                   onClick={handleUpgradeClick}
                   disabled={upgrading}
                   style={{
@@ -510,7 +712,7 @@ export default function Dashboard({
                 }}
               >
                 ⚠️{" "}
-                <strong style={{ color: C.crimson }}>
+                <strong style={{ color: C.crimsonLight }}>
                   {freeLeft} free {freeLeft !== 1 ? "itineraries" : "itinerary"}
                 </strong>{" "}
                 remaining.
@@ -525,7 +727,7 @@ export default function Dashboard({
             ) : trips.length === 0 ? (
               <div
                 className="card"
-                style={{ padding: "60px 40px", textAlign: "center" }}
+                style={{ padding: "60px 32px", textAlign: "center" }}
               >
                 <div style={{ fontSize: 40, marginBottom: 16 }}>🗺️</div>
                 <h3
@@ -540,7 +742,10 @@ export default function Dashboard({
                 <p style={{ color: C.midGray, fontSize: 14, marginBottom: 24 }}>
                   Create your first AI-powered travel itinerary
                 </p>
-                <button className="btn-primary" onClick={onCreateTrip}>
+                <button
+                  className="btn-primary vai-focusable"
+                  onClick={onCreateTrip}
+                >
                   <Icon.plus /> Plan Your First Trip
                 </button>
               </div>
@@ -548,7 +753,7 @@ export default function Dashboard({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))",
+                  gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))",
                   gap: 20,
                 }}
               >
@@ -569,11 +774,11 @@ export default function Dashboard({
         {/* ── EXPLORE TAB ── */}
         {activeTab === "explore" && (
           <div>
-            <div style={{ marginBottom: 32 }}>
+            <div style={{ marginBottom: 28 }}>
               <p className="section-label">Popular Destinations</p>
               <h2
                 className="display-heading"
-                style={{ fontSize: 26, marginBottom: 8 }}
+                style={{ fontSize: 24, marginBottom: 8, lineHeight: 1.15 }}
               >
                 Explore Pakistan
               </h2>
@@ -591,11 +796,14 @@ export default function Dashboard({
               {DESTINATIONS.map((dest) => (
                 <div
                   key={dest.name}
-                  className="card hover-lift"
+                  className="vai-trip-card vai-card-lift"
                   style={{
-                    cursor: "pointer",
+                    cursor: isLimitHit ? "not-allowed" : "pointer",
                     overflow: "hidden",
                     borderRadius: 10,
+                    background: C.darkGray,
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    opacity: isLimitHit ? 0.6 : 1,
                   }}
                   onClick={isLimitHit ? undefined : onCreateTrip}
                 >
@@ -613,25 +821,19 @@ export default function Dashboard({
                         e.target.src =
                           "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3d/Hunza_Valley_Pakistan.jpg/800px-Hunza_Valley_Pakistan.jpg";
                       }}
+                      className="vai-trip-img"
                       style={{
                         width: "100%",
                         height: "100%",
                         objectFit: "cover",
-                        transition: "transform 0.3s",
                       }}
-                      onMouseEnter={(e) =>
-                        (e.target.style.transform = "scale(1.07)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.target.style.transform = "scale(1)")
-                      }
                     />
                     <div
                       style={{
                         position: "absolute",
                         inset: 0,
                         background:
-                          "linear-gradient(to top, rgba(0,0,0,0.75), transparent)",
+                          "linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.1) 60%, transparent 100%)",
                       }}
                     />
                     <div
@@ -639,6 +841,7 @@ export default function Dashboard({
                         position: "absolute",
                         bottom: 12,
                         left: 14,
+                        right: 14,
                         color: "white",
                         fontFamily: "'Playfair Display', serif",
                         fontSize: 16,
@@ -668,11 +871,11 @@ export default function Dashboard({
         {/* ── HISTORY TAB — distinct design (Issue 6) ── */}
         {activeTab === "history" && (
           <div>
-            <div style={{ marginBottom: 32 }}>
+            <div style={{ marginBottom: 28 }}>
               <p className="section-label">Your Journey</p>
               <h2
                 className="display-heading"
-                style={{ fontSize: 26, marginBottom: 8 }}
+                style={{ fontSize: 24, marginBottom: 8, lineHeight: 1.15 }}
               >
                 Trip History
               </h2>
@@ -698,35 +901,11 @@ export default function Dashboard({
                 Loading your bookings…
               </div>
             ) : paidBookings.length > 0 ? (
-              <div style={{ marginBottom: 40 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    marginBottom: 20,
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      background: "rgb(120,220,180)",
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: "rgb(120,220,180)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.1em",
-                    }}
-                  >
-                    Paid Bookings ({paidBookings.length})
-                  </span>
-                </div>
+              <div style={{ marginBottom: 36 }}>
+                <SectionHeading
+                  dotColor="rgb(120,220,180)"
+                  label={`Paid Bookings (${paidBookings.length})`}
+                />
                 <div
                   style={{
                     display: "flex",
@@ -746,7 +925,7 @@ export default function Dashboard({
             paidBookings.length === 0 ? (
               <div
                 className="card"
-                style={{ padding: "60px 40px", textAlign: "center" }}
+                style={{ padding: "60px 32px", textAlign: "center" }}
               >
                 <div style={{ fontSize: 44, marginBottom: 16 }}>📖</div>
                 <h3
@@ -766,40 +945,16 @@ export default function Dashboard({
               <>
                 {completedTrips.length > 0 && (
                   <>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        marginBottom: 20,
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: "50%",
-                          background: "#5CCC5C",
-                        }}
-                      />
-                      <span
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: "#5CCC5C",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.1em",
-                        }}
-                      >
-                        Completed ({completedTrips.length})
-                      </span>
-                    </div>
+                    <SectionHeading
+                      dotColor="#5CCC5C"
+                      label={`Completed (${completedTrips.length})`}
+                    />
                     <div
                       style={{
                         display: "flex",
                         flexDirection: "column",
-                        gap: 16,
-                        marginBottom: 40,
+                        gap: 12,
+                        marginBottom: 36,
                       }}
                     >
                       {completedTrips.map((trip) => (
@@ -815,39 +970,15 @@ export default function Dashboard({
                 )}
                 {cancelledTrips.length > 0 && (
                   <>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        marginBottom: 20,
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: "50%",
-                          background: C.midGray,
-                        }}
-                      />
-                      <span
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: C.midGray,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.1em",
-                        }}
-                      >
-                        Cancelled ({cancelledTrips.length})
-                      </span>
-                    </div>
+                    <SectionHeading
+                      dotColor={C.midGray}
+                      label={`Cancelled (${cancelledTrips.length})`}
+                    />
                     <div
                       style={{
                         display: "flex",
                         flexDirection: "column",
-                        gap: 16,
+                        gap: 12,
                       }}
                     >
                       {cancelledTrips.map((trip) => (
@@ -883,22 +1014,58 @@ export default function Dashboard({
   );
 }
 
+// UI Round 1: section heading helper. Pure presentation — replaces the
+// inline-duplicated dot+label markup in the History tab. Same visual,
+// same colors, just less copy-pasted JSX.
+function SectionHeading({ dotColor, label }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        marginBottom: 18,
+      }}
+    >
+      <div
+        style={{
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          background: dotColor,
+        }}
+      />
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: dotColor,
+          textTransform: "uppercase",
+          letterSpacing: "0.12em",
+          fontFamily: "'DM Mono', monospace",
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
 // Distinct history row card design
 function HistoryRow({ trip, onClick, statusColor }) {
   return (
     <div
       onClick={onClick}
-      className="hover-lift"
+      className="vai-card-lift"
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 20,
-        padding: "16px 20px",
+        gap: 16,
+        padding: "14px 18px",
         background: C.darkGray,
         borderRadius: 10,
         border: `1px solid rgba(255,255,255,0.06)`,
         cursor: "pointer",
-        transition: "all 0.2s",
       }}
     >
       <div
@@ -927,6 +1094,9 @@ function HistoryRow({ trip, onClick, statusColor }) {
             fontSize: 17,
             fontWeight: 600,
             marginBottom: 2,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
         >
           {trip.destination}
@@ -940,17 +1110,24 @@ function HistoryRow({ trip, onClick, statusColor }) {
           style={{
             display: "inline-block",
             padding: "4px 12px",
-            borderRadius: 20,
+            borderRadius: 999,
             fontSize: 11,
             fontWeight: 600,
             background: `${statusColor}20`,
             color: statusColor,
+            border: `1px solid ${statusColor}40`,
             marginBottom: 4,
           }}
         >
           {trip.status.charAt(0).toUpperCase() + trip.status.slice(1)}
         </span>
-        <div style={{ fontSize: 12, color: C.midGray }}>
+        <div
+          style={{
+            fontSize: 12,
+            color: C.midGray,
+            fontFamily: "'DM Mono', monospace",
+          }}
+        >
           PKR {Number(trip.budget || 0).toLocaleString()}
         </div>
       </div>
@@ -981,7 +1158,7 @@ function BookingRow({ booking, navigate }) {
   return (
     <div
       onClick={() => navigate(`/booking/${booking._id}/confirmed`)}
-      className="hover-lift"
+      className="vai-card-lift vai-focusable"
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -993,13 +1170,12 @@ function BookingRow({ booking, navigate }) {
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 20,
-        padding: "16px 20px",
+        gap: 16,
+        padding: "14px 18px",
         background: C.darkGray,
         borderRadius: 10,
         border: `1px solid rgba(120,220,180,0.18)`,
         cursor: "pointer",
-        transition: "all 0.2s",
       }}
     >
       {/* Trip image (from snapshot, falls back to a generic Pakistan landscape) */}
@@ -1032,6 +1208,7 @@ function BookingRow({ booking, navigate }) {
             alignItems: "center",
             gap: 10,
             marginBottom: 3,
+            flexWrap: "wrap",
           }}
         >
           <span

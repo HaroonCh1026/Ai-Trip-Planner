@@ -1,6 +1,5 @@
 import React from "react";
 import { C } from "../../styles/colors";
-import { Icon } from "../Icon";
 
 export default function PricingSection({ onSignup }) {
   const plans = [
@@ -8,7 +7,7 @@ export default function PricingSection({ onSignup }) {
       name: "Free",
       price: "PKR 0",
       period: "forever",
-      features: ["5 AI itineraries", "Day-by-day planning", "Hotel suggestions", "Google Maps integration", "Trip history", "PKR budgeting"],
+      tagline: "Plan up to 5 trips with full AI itinerary generation and saving.",
       cta: "Get Started",
       highlight: false,
     },
@@ -16,7 +15,7 @@ export default function PricingSection({ onSignup }) {
       name: "Pro",
       price: "PKR 2,500",
       period: "per month",
-      features: ["Unlimited itineraries", "Everything in Free", "Priority AI generation", "PDF export", "Advanced customization", "WhatsApp support", "Offline access"],
+      tagline: "Unlimited trips, exclusive Insider Tips, and PDF export.",
       cta: "Start Pro",
       highlight: true,
     },
@@ -65,13 +64,15 @@ const PlanCard = ({ plan, onSignup }) => (
     
     <div style={{ height: 1, background: plan.highlight ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)", margin: "24px 0" }} />
     
-    <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 12, marginBottom: 32 }}>
-      {plan.features.map((feature) => (
-        <li key={feature} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14, color: plan.highlight ? "rgba(255,255,255,0.9)" : C.offWhite }}>
-          <Icon.check /> {feature}
-        </li>
-      ))}
-    </ul>
+    <p style={{
+      fontSize: 14,
+      lineHeight: 1.6,
+      color: plan.highlight ? "rgba(255,255,255,0.88)" : C.offWhite,
+      marginBottom: 32,
+      minHeight: 64,
+    }}>
+      {plan.tagline}
+    </p>
     
     <button
       onClick={onSignup}

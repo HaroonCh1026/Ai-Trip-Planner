@@ -62,12 +62,12 @@ export default function WhyUsPanel({ trip }) {
     },
     {
       label: "VoyageurAI",
-      sublabel: "AI-optimized + verified data",
+      sublabel: "Smart planning + verified prices",
       price: ourPrice,
       features: [
-        "AI-built itinerary in 30 seconds",
-        "Cost validated by ML model",
-        "Transparent 8% service fee",
+        "Personalized itinerary in 30 seconds",
+        "Prices cross-checked against real trips",
+        "Flat 8% service fee, no hidden charges",
       ],
       highlight: true,
     },

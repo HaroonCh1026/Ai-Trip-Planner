@@ -53,25 +53,48 @@ export default function DayDetails({ currentDay, activeDay }) {
 
   return (
     <div className="anim-fadeIn">
-      <div style={{ marginBottom: 28 }}>
+      <div style={{ marginBottom: 24 }}>
         <div
           style={{
             fontFamily: "'DM Mono', monospace",
             fontSize: 11,
-            color: C.crimson,
-            letterSpacing: "0.15em",
+            color: C.crimsonLight,
+            letterSpacing: "0.18em",
             marginBottom: 6,
+            textTransform: "uppercase",
           }}
         >
-          DAY {getDayNumber()}
+          Day {getDayNumber()}
         </div>
-        <h2 className="display-heading" style={{ fontSize: 28 }}>
+        <h2
+          className="display-heading"
+          style={{ fontSize: "clamp(22px, 3vw, 28px)", lineHeight: 1.2 }}
+        >
           {getTitle()}
         </h2>
         {dailyCost > 0 && (
-          <div style={{ color: C.midGray, fontSize: 14, marginTop: 6 }}>
+          <div
+            style={{
+              color: C.midGray,
+              fontSize: 13,
+              marginTop: 8,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "4px 10px",
+              borderRadius: 6,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.06)",
+            }}
+          >
             Estimated daily cost:{" "}
-            <span style={{ color: C.offWhite, fontWeight: 600 }}>
+            <span
+              style={{
+                color: C.offWhite,
+                fontWeight: 600,
+                fontFamily: "'DM Mono', monospace",
+              }}
+            >
               PKR {dailyCost}
             </span>
           </div>
@@ -87,7 +110,8 @@ export default function DayDetails({ currentDay, activeDay }) {
             top: 0,
             bottom: 0,
             width: 2,
-            background: "rgba(140,50,50,0.2)",
+            background:
+              "linear-gradient(to bottom, rgba(140,50,50,0.35) 0%, rgba(140,50,50,0.1) 100%)",
           }}
         />
 

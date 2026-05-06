@@ -22,51 +22,65 @@ export default function DaySidebar({ days, activeDay, setActiveDay, trip }) {
     return 0;
   };
 
+  // Reusable micro-label for section headers ("DAYS", "TRAVEL TIPS").
+  const sectionLabel = {
+    fontSize: 11,
+    fontFamily: "'DM Mono', monospace",
+    letterSpacing: "0.18em",
+    color: C.midGray,
+    marginBottom: 14,
+    textTransform: "uppercase",
+  };
+
   return (
     <div>
-      <div style={{ position: "sticky", top: 88 }}>
-        <div
-          style={{
-            fontSize: 11,
-            fontFamily: "'DM Mono', monospace",
-            letterSpacing: "0.15em",
-            color: C.midGray,
-            marginBottom: 16,
-          }}
-        >
-          DAYS
-        </div>
+      {/* ── DESKTOP: sticky vertical column ──────────────────────────────── */}
+      <div
+        className="vai-day-sidebar-desktop"
+        style={{ position: "sticky", top: 84 }}
+      >
+        <div style={sectionLabel}>Days</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {days.map((day, i) => {
             const dayNum = getDayNumber(day, i);
             const dayTitle = getDayTitle(day, i);
             const dailyCost = getDailyCost(day);
-            
+            const active = activeDay === i;
+
             return (
               <button
                 key={i}
+                className="vai-focusable"
                 onClick={() => setActiveDay(i)}
                 style={{
                   padding: "14px 16px",
                   borderRadius: 8,
                   border: "none",
                   cursor: "pointer",
-                  background:
-                    activeDay === i
-                      ? "rgba(140,50,50,0.2)"
-                      : "transparent",
-                  borderLeft: `3px solid ${activeDay === i ? C.crimson : "transparent"}`,
+                  background: active ? "rgba(140,50,50,0.18)" : "transparent",
+                  borderLeft: `3px solid ${active ? C.crimson : "transparent"}`,
                   textAlign: "left",
-                  transition: "all 0.2s",
+                  transition: "background 0.18s ease, border-color 0.18s ease",
                   fontFamily: "'DM Sans', sans-serif",
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) {
+                    e.currentTarget.style.background = "transparent";
+                  }
                 }}
               >
                 <div
                   style={{
                     fontSize: 11,
-                    color: activeDay === i ? C.crimson : C.midGray,
-                    marginBottom: 2,
+                    color: active ? C.crimsonLight : C.midGray,
+                    marginBottom: 3,
                     fontFamily: "'DM Mono', monospace",
+                    letterSpacing: "0.1em",
                   }}
                 >
                   DAY {dayNum}
@@ -74,9 +88,9 @@ export default function DaySidebar({ days, activeDay, setActiveDay, trip }) {
                 <div
                   style={{
                     fontSize: 13,
-                    fontWeight: 500,
-                    color: activeDay === i ? C.offWhite : C.midGray,
-                    lineHeight: 1.3,
+                    fontWeight: active ? 600 : 500,
+                    color: active ? C.offWhite : "rgba(242,242,242,0.7)",
+                    lineHeight: 1.35,
                   }}
                 >
                   {dayTitle}
@@ -84,9 +98,10 @@ export default function DaySidebar({ days, activeDay, setActiveDay, trip }) {
                 {dailyCost > 0 && (
                   <div
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       color: C.midGray,
-                      marginTop: 3,
+                      marginTop: 4,
+                      fontFamily: "'DM Mono', monospace",
                     }}
                   >
                     PKR {dailyCost}
@@ -100,24 +115,8 @@ export default function DaySidebar({ days, activeDay, setActiveDay, trip }) {
         {/* Overall tips */}
         {trip.tips && Array.isArray(trip.tips) && trip.tips.length > 0 && (
           <div style={{ marginTop: 32 }}>
-            <div
-              style={{
-                fontSize: 11,
-                fontFamily: "'DM Mono', monospace",
-                letterSpacing: "0.15em",
-                color: C.midGray,
-                marginBottom: 12,
-              }}
-            >
-              TRAVEL TIPS
-            </div>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
-            >
+            <div style={{ ...sectionLabel, marginBottom: 12 }}>Travel Tips</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {trip.tips.slice(0, 3).map((tip, i) => (
                 <div
                   key={i}
@@ -125,12 +124,87 @@ export default function DaySidebar({ days, activeDay, setActiveDay, trip }) {
                     display: "flex",
                     gap: 8,
                     fontSize: 12,
-                    color: C.midGray,
+                    color: "rgba(232,232,232,0.75)",
                     lineHeight: 1.6,
                   }}
                 >
                   <span style={{ color: C.crimson, flexShrink: 0 }}>✦</span>{" "}
-                  {typeof tip === 'string' ? tip : tip.text || JSON.stringify(tip)}
+                  {typeof tip === "string"
+                    ? tip
+                    : tip.text || JSON.stringify(tip)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── MOBILE: horizontal scrolling day pills ───────────────────────── */}
+      <div className="vai-day-sidebar-mobile">
+        <div style={{ ...sectionLabel, marginBottom: 10 }}>Days</div>
+        <div className="vai-day-pills">
+          {days.map((day, i) => {
+            const dayNum = getDayNumber(day, i);
+            const active = activeDay === i;
+            return (
+              <button
+                key={i}
+                className="vai-day-pill vai-focusable"
+                onClick={() => setActiveDay(i)}
+                aria-pressed={active}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 999,
+                  border: `1px solid ${active ? C.crimson : "rgba(255,255,255,0.12)"}`,
+                  background: active
+                    ? "rgba(140,50,50,0.22)"
+                    : "rgba(255,255,255,0.03)",
+                  color: active ? C.offWhite : "rgba(242,242,242,0.7)",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  fontWeight: active ? 600 : 500,
+                  fontFamily: "'DM Sans', sans-serif",
+                  whiteSpace: "nowrap",
+                  transition: "all 0.18s ease",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "'DM Mono', monospace",
+                    letterSpacing: "0.08em",
+                    color: active ? C.crimsonLight : C.midGray,
+                    marginRight: 6,
+                  }}
+                >
+                  D{dayNum}
+                </span>
+                {getDayTitle(day, i)}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Travel tips (mobile) — kept below the pills, fully visible. */}
+        {trip.tips && Array.isArray(trip.tips) && trip.tips.length > 0 && (
+          <div style={{ marginTop: 20, marginBottom: 4 }}>
+            <div style={{ ...sectionLabel, marginBottom: 10 }}>Travel Tips</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {trip.tips.slice(0, 3).map((tip, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    fontSize: 12,
+                    color: "rgba(232,232,232,0.75)",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  <span style={{ color: C.crimson, flexShrink: 0 }}>✦</span>{" "}
+                  {typeof tip === "string"
+                    ? tip
+                    : tip.text || JSON.stringify(tip)}
                 </div>
               ))}
             </div>

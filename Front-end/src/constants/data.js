@@ -307,50 +307,47 @@ export const BLOGS = [
     date: "May 10, 2025",
   },
 ];
-
 // ── CHATBOT_QUESTIONS ─────────────────────────────────────────────────────
-// Friendlier, Pakistan-flavored question text. Each entry has a `label` used
-// by the review screen to show a clean field name instead of the raw id.
+// GUI flow: each question is answered by tapping in the ChoicePicker rather
+// than typing. IDs, labels, and types are unchanged so ReviewSummary, the
+// Joi backend schema, and the Gemini prompt all keep working.
 export const CHATBOT_QUESTIONS = [
   {
     id: "origin",
     label: "Starting from",
-    question: "Where will your trip begin? Type any city in Pakistan.",
-    placeholder: "e.g., Karachi or Lahore",
+    question: "Where will your trip begin? Pick a city below.",
+    placeholder: "Tap to select",
     type: "text",
   },
   {
     id: "destination",
     label: "Going to",
-    question: "Where would you like to go? Pick a destination in Pakistan.",
-    placeholder: "e.g., Hunza Valley or Skardu",
+    question: "Where would you like to go? Pick your destination.",
+    placeholder: "Tap to select",
     type: "text",
   },
   {
     id: "days",
     label: "Number of days",
-    question: "How many days will your trip be? (1 to 30)",
-    placeholder: "e.g., 7",
+    question: "How many days will your trip be? Pick a preset or fine-tune.",
+    placeholder: "Tap to select",
     type: "number",
   },
   {
     id: "startDate",
     label: "Departure date",
     question: "When are you planning to leave?",
-    placeholder: "Select a date",
+    placeholder: "Tap to select",
     type: "date",
   },
   {
     id: "budget",
     label: "Total budget (PKR)",
-    question: "What's your total trip budget in PKR?",
-    placeholder: "e.g., 150000",
+    question: "What's your total trip budget? Pick a preset or use the slider.",
+    placeholder: "Tap to select",
     type: "number",
   },
   {
-    // Day 3: special question that renders VehicleSelectStep instead of a
-    // text input. Sets BOTH `vehicleId` and `groupSize` in the answers map
-    // when the user submits — TripCreator handles the dual write.
     id: "vehicle",
     label: "Group & transport",
     question: "Who's traveling, and how would you like to get there?",
@@ -359,8 +356,8 @@ export const CHATBOT_QUESTIONS = [
   {
     id: "preferences",
     label: "Your interests",
-    question: "What are you most interested in? Food, nature, history, shopping, anything else.",
-    placeholder: "e.g., Food, Mountains, History",
+    question: "What are you most interested in? Tap all that apply.",
+    placeholder: "Tap to select",
     type: "text",
   },
 ];
