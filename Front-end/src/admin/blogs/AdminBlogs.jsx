@@ -9,13 +9,12 @@ const BLANK = { title: "", excerpt: "", content: "", image: "", category: "Trave
 const CATS = ["Travel Tips", "Destination Guide", "Food & Culture", "Adventure", "Budget Travel", "Itinerary Ideas"];
 
 export default function AdminBlogs({ blogs, setBlogs }) {
-  const [view, setView]       = useState("list");   // "list" | "form"
-  const [editing, setEditing] = useState(null);     // null = new, obj = edit
+  const [view, setView]       = useState("list");
+  const [editing, setEditing] = useState(null);
   const [form, setForm]       = useState(BLANK);
   const [saving, setSaving]   = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [search, setSearch]   = useState("");
-  // Day 6: replace alert() / window.confirm() with proper UI
   const [toast, setToast]     = useState(null);
   const [confirm, setConfirm] = useState(null);
 
@@ -79,7 +78,7 @@ export default function AdminBlogs({ blogs, setBlogs }) {
   if (view === "form") return (
     <>
     <div className="anim-fadeIn">
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 32 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 32, flexWrap:"wrap" }}>
         <button onClick={() => setView("list")} style={{ background: "transparent", border: "none", color: C.midGray, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
           <Icon.arrowLeft width="16" height="16" /> Back
         </button>
@@ -88,8 +87,11 @@ export default function AdminBlogs({ blogs, setBlogs }) {
           <h2 className="display-heading" style={{ fontSize: 28 }}>{editing ? "Edit Blog Post" : "New Blog Post"}</h2>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div
+        className="vai-admin-blog-form-grid"
+        style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
           <div className="card" style={{ padding: 28 }}>
             <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, marginBottom: 20 }}>Content</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -99,7 +101,7 @@ export default function AdminBlogs({ blogs, setBlogs }) {
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
           <div className="card" style={{ padding: 24 }}>
             <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 15, marginBottom: 16 }}>Settings</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -113,9 +115,12 @@ export default function AdminBlogs({ blogs, setBlogs }) {
               </div>
               <div><label style={{ fontSize: 12, color: C.midGray, display: "block", marginBottom: 6 }}>Author</label><input value={form.author} onChange={(e) => setForm(f=>({...f,author:e.target.value}))} /></div>
               <div><label style={{ fontSize: 12, color: C.midGray, display: "block", marginBottom: 6 }}>Read Time</label><input value={form.readTime} onChange={(e) => setForm(f=>({...f,readTime:e.target.value}))} placeholder="5 min read" /></div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                <div><div style={{ fontSize: 14, fontWeight: 500 }}>Published</div><div style={{ fontSize: 12, color: C.midGray, marginTop: 2 }}>Visible on landing page</div></div>
-                <div onClick={() => setForm(f=>({...f,published:!f.published}))} style={{ width: 44, height: 24, borderRadius: 12, background: form.published ? C.crimson : "rgba(255,255,255,0.15)", cursor: "pointer", position: "relative", transition: "background 0.25s" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderTop: "1px solid rgba(255,255,255,0.06)", gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 500 }}>Published</div>
+                  <div style={{ fontSize: 12, color: C.midGray, marginTop: 2 }}>Visible on landing page</div>
+                </div>
+                <div onClick={() => setForm(f=>({...f,published:!f.published}))} style={{ width: 44, height: 24, borderRadius: 12, background: form.published ? C.crimson : "rgba(255,255,255,0.15)", cursor: "pointer", position: "relative", transition: "background 0.25s", flexShrink: 0 }}>
                   <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: form.published ? 23 : 3, transition: "left 0.25s" }} />
                 </div>
               </div>
@@ -136,7 +141,10 @@ export default function AdminBlogs({ blogs, setBlogs }) {
   return (
     <>
     <div className="anim-fadeIn">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28 }}>
+      <div
+        className="vai-admin-blog-header"
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28, gap: 16 }}
+      >
         <div>
           <p className="section-label">Content Management</p>
           <h2 className="display-heading" style={{ fontSize: 28 }}>Blog Posts ({blogs.length})</h2>
@@ -154,7 +162,10 @@ export default function AdminBlogs({ blogs, setBlogs }) {
           <button className="btn-primary" onClick={openNew}><Icon.plus /> Create First Post</button>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 }}>
+        <div
+          className="vai-admin-blog-grid"
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 }}
+        >
           {filtered.map((blog) => (
             <div key={blog._id} className="card" style={{ overflow: "hidden" }}>
               <div style={{ height: 160, position: "relative", overflow: "hidden" }}>
@@ -174,14 +185,17 @@ export default function AdminBlogs({ blogs, setBlogs }) {
               <div style={{ padding: 20 }}>
                 <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, marginBottom: 8, lineHeight: 1.3 }}>{blog.title}</h3>
                 <p style={{ fontSize: 13, color: C.midGray, lineHeight: 1.6, marginBottom: 16, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{blog.excerpt}</p>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 12, color: C.midGray }}>{blog.readTime} · {blog.author}</span>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => togglePublish(blog)} style={{ padding: "6px 12px", background: "transparent", border: `1px solid ${blog.published ? "rgba(255,255,255,0.1)" : C.crimson}`, borderRadius: 4, color: blog.published ? C.midGray : C.crimson, cursor: "pointer", fontSize: 12 }}>
+                <div
+                  className="vai-admin-blog-card-footer"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+                >
+                  <span className="vai-blog-meta" style={{ fontSize: 12, color: C.midGray, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{blog.readTime} · {blog.author}</span>
+                  <div className="vai-blog-actions" style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => togglePublish(blog)} style={{ padding: "6px 12px", background: "transparent", border: `1px solid ${blog.published ? "rgba(255,255,255,0.1)" : C.crimson}`, borderRadius: 4, color: blog.published ? C.midGray : C.crimson, cursor: "pointer", fontSize: 12, fontFamily: "'DM Sans', sans-serif" }}>
                       {blog.published ? "Unpublish" : "Publish"}
                     </button>
-                    <button onClick={() => openEdit(blog)} style={{ padding: "6px 12px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: C.midGray, cursor: "pointer", fontSize: 12 }}>Edit</button>
-                    <button onClick={() => handleDelete(blog._id)} disabled={deleting === blog._id} style={{ padding: "6px 12px", background: "transparent", border: "1px solid rgba(200,50,50,0.3)", borderRadius: 4, color: "#FF6B6B", cursor: "pointer", fontSize: 12 }}>
+                    <button onClick={() => openEdit(blog)} style={{ padding: "6px 12px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, color: C.midGray, cursor: "pointer", fontSize: 12, fontFamily: "'DM Sans', sans-serif" }}>Edit</button>
+                    <button onClick={() => handleDelete(blog._id)} disabled={deleting === blog._id} style={{ padding: "6px 12px", background: "transparent", border: "1px solid rgba(200,50,50,0.3)", borderRadius: 4, color: "#FF6B6B", cursor: "pointer", fontSize: 12, fontFamily: "'DM Sans', sans-serif" }}>
                       {deleting === blog._id ? "..." : "Delete"}
                     </button>
                   </div>

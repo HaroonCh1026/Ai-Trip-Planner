@@ -1,9 +1,6 @@
 import { C } from "../../styles/colors";
 import { Icon } from "../../components/Icon";
 
-// Round 3 (Admin #1): `trips` prop dropped + "Recent Itineraries" widget removed.
-// Aggregate counts (totalTrips, monthlyData, regions) remain — those come from
-// /admin/stats and are anonymized system-health metrics, not per-user trip data.
 export default function AdminDashboard({ stats, users, bookings }) { // eslint-disable-line no-unused-vars
   const { totalUsers=0, activeTrips=0, aiCalls=0, revenue="PKR 0", userGrowth=0, tripGrowth=0, proUsers=0, regions=[], monthlyData=[] } = stats;
 
@@ -22,7 +19,10 @@ export default function AdminDashboard({ stats, users, bookings }) { // eslint-d
   return (
     <div className="anim-fadeIn">
       {/* Stat Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 32 }}>
+      <div
+        className="vai-admin-stats"
+        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 32 }}
+      >
         {statCards.map((s) => (
           <div key={s.label} className="card" style={{ padding: 28 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
@@ -37,13 +37,16 @@ export default function AdminDashboard({ stats, users, bookings }) { // eslint-d
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24, marginBottom: 24 }}>
+      <div
+        className="vai-admin-twocol"
+        style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24, marginBottom: 24 }}
+      >
         {/* Monthly Chart */}
         <div className="card" style={{ padding: 28 }}>
           <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, marginBottom: 20 }}>Monthly Itineraries Generated</h3>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 160 }}>
+          <div className="vai-admin-chart" style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 160 }}>
             {monthlyData.map((v, i) => (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
+              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end", minWidth: 0 }}>
                 <div style={{ fontSize: 9, color: C.midGray }}>{v || ""}</div>
                 <div style={{ width: "100%", background: i === 11 ? C.crimson : "rgba(140,50,50,0.3)", borderRadius: "3px 3px 0 0", height: `${Math.max((v/maxMonthly)*100, v > 0 ? 4 : 0)}%`, transition: "height 0.5s ease", minHeight: v > 0 ? 4 : 0 }} />
                 <div style={{ fontSize: 9, color: C.midGray }}>{chartMonths[i]}</div>
@@ -52,7 +55,7 @@ export default function AdminDashboard({ stats, users, bookings }) { // eslint-d
           </div>
         </div>
 
-        {/* Regional Activity — real data from DB */}
+        {/* Regional Activity */}
         <div className="card" style={{ padding: 28 }}>
           <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, marginBottom: 20 }}>Top Destinations</h3>
           {regions.length === 0 ? (
@@ -78,17 +81,16 @@ export default function AdminDashboard({ stats, users, bookings }) { // eslint-d
         </div>
       </div>
 
-      {/* Recent Activity — Round 3 (Admin #1): "Recent Itineraries" widget removed.
-          "Recent Users" promoted to full width. */}
+      {/* Recent Users */}
       <div className="card" style={{ padding: 24 }}>
         <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, marginBottom: 16 }}>Recent Users</h3>
         {users.slice(0, 5).map((u) => (
-          <div key={u.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 500 }}>{u.name}</div>
-              <div style={{ fontSize: 12, color: C.midGray }}>{u.email}</div>
+          <div key={u.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", gap: 12 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
+              <div style={{ fontSize: 12, color: C.midGray, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
             </div>
-            <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 4, background: u.plan === "pro" ? "rgba(50,180,50,0.15)" : "rgba(255,255,255,0.05)", color: u.plan === "pro" ? "#5CCC5C" : C.midGray }}>{u.plan === "pro" ? "Pro" : "Free"}</span>
+            <span style={{ fontSize: 11, padding: "3px 9px", borderRadius: 4, background: u.plan === "pro" ? "rgba(50,180,50,0.15)" : "rgba(255,255,255,0.05)", color: u.plan === "pro" ? "#5CCC5C" : C.midGray, flexShrink: 0 }}>{u.plan === "pro" ? "Pro" : "Free"}</span>
           </div>
         ))}
       </div>

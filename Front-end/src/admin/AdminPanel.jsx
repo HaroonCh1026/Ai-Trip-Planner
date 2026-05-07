@@ -13,7 +13,6 @@ import AdminSidebar from "./AdminSidebar";
 import AdminHeader from "./AdminHeader";
 import AdminDashboard from "./dashboard/AdminDashboard";
 import AdminUsers from "./users/AdminUsers";
-// Round 3 (Admin #1): AdminTrips removed — admin no longer sees user trips.
 import AdminBookings from "./bookings/AdminBookings";
 import AdminSupport from "./support/AdminSupport";
 import AdminBlogs from "./blogs/AdminBlogs";
@@ -43,24 +42,26 @@ export default function AdminPanel({
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Derive the active tab from the URL (/admin or /admin/<tab>).
-  // Falls back to "dashboard" if the URL has no segment or an unknown one.
   const urlTab = location.pathname
     .replace(/^\/admin\/?/, "")
     .split("/")[0];
   const activeTab = VALID_TABS.includes(urlTab) ? urlTab : "dashboard";
 
-  // Setter used by the sidebar — just navigates, URL is the source of truth.
+  // Round 4 mobile: drawer state for the slide-in sidebar on phones.
+  // No-op on desktop because the drawer styles only apply at <=480px.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Setter used by the sidebar — navigates AND closes the drawer if open.
   const setActiveTab = (tab) => {
+    setDrawerOpen(false);
     if (tab === "dashboard") navigate("/admin");
     else navigate(`/admin/${tab}`);
   };
 
   const [users, setUsers] = useState([]);
-  // Round 3 (Admin #1): trips state removed — admin no longer sees user trips.
   const [bookings, setBookings] = useState([]);
   const [tickets, setTickets] = useState([]);
-  const [blogs, setBlogs] = useState([]);
+  const [blogs, setBlogs] = useState([]); // eslint-disable-line no-unused-vars
   const [bookingMeta, setBookingMeta] = useState({
     totalRevenue: 0,
     paidCount: 0,
@@ -79,7 +80,6 @@ export default function AdminPanel({
 
   const load = async () => {
     try {
-      // Round 3 (Admin #1): /admin/trips fetch removed — admin no longer sees user trips.
       const [s, u, b, tk, bl] = await Promise.all([
         api.get("/admin/stats"),
         api.get("/admin/users"),
@@ -106,26 +106,47 @@ export default function AdminPanel({
     load();
   }, []);
 
+  // Lock body scroll when the mobile drawer is open so the page
+  // behind doesn't scroll under your finger.
+  useEffect(() => {
+    if (drawerOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+  }, [drawerOpen]);
+
   const openTicketCount = tickets.filter((t) => t.status === "Open").length;
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        gridTemplateColumns: "260px 1fr",
-        background: C.nearBlack,
-      }}
-    >
+    <div className="vai-admin-shell" style={{ background: C.nearBlack }}>
+      {/* Backdrop — only visible on mobile when drawer is open */}
+      {drawerOpen && (
+        <div
+          className="vai-admin-backdrop"
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       <AdminSidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onLogout={onLogout}
         openTicketCount={openTicketCount}
+        drawerOpen={drawerOpen}
+        onCloseDrawer={() => setDrawerOpen(false)}
       />
-      <div style={{ display: "flex", flexDirection: "column", overflow: "auto" }}>
-        <AdminHeader user={user} activeTab={activeTab} />
-        <div style={{ flex: 1, padding: "32px 40px" }}>
+
+      <div style={{ display: "flex", flexDirection: "column", overflow: "auto", minWidth: 0 }}>
+        <AdminHeader
+          user={user}
+          activeTab={activeTab}
+          onOpenDrawer={() => setDrawerOpen(true)}
+        />
+        <div className="vai-admin-content-pad" style={{ flex: 1 }}>
           <Routes>
             <Route
               index
@@ -137,15 +158,11 @@ export default function AdminPanel({
                 />
               }
             />
-            <Route
-              path="dashboard"
-              element={<Navigate to="/admin" replace />}
-            />
+            <Route path="dashboard" element={<Navigate to="/admin" replace />} />
             <Route
               path="users"
               element={<AdminUsers users={users} setUsers={setUsers} />}
             />
-            {/* Round 3 (Admin #1): /admin/trips route removed — falls through to "*" below which redirects to /admin. */}
             <Route
               path="bookings"
               element={

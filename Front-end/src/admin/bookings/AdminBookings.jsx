@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { C } from "../../styles/colors";
 
-export default function AdminBookings({ bookings = [], bookingMeta = {} }) {
+export default function AdminBookings({ bookings = [], bookingMeta = {} }) { // eslint-disable-line no-unused-vars
   const [search, setSearch]   = useState("");
   const [filter, setFilter]   = useState("all");
   const [sortBy, setSortBy]   = useState("newest");
@@ -32,6 +32,26 @@ export default function AdminBookings({ bookings = [], bookingMeta = {} }) {
     Cancelled:{ bg:"rgba(140,50,50,0.12)", color:C.crimson  },
   };
 
+  const statusPill = (status) => (
+    <span style={{
+      padding:"4px 12px", borderRadius:20, fontSize:11, fontWeight:700, whiteSpace:"nowrap",
+      background:STATUS_STYLE[status]?.bg||"rgba(255,255,255,0.06)",
+      color:STATUS_STYLE[status]?.color||C.midGray
+    }}>
+      {status||"—"}
+    </span>
+  );
+
+  const planPill = (plan) => (
+    <span style={{
+      fontSize:11, padding:"3px 8px", borderRadius:4, whiteSpace:"nowrap",
+      background:plan==="pro"?"rgba(50,180,50,0.12)":"rgba(255,255,255,0.05)",
+      color:plan==="pro"?"#5CCC5C":C.midGray,
+    }}>
+      {plan==="pro" ? "⭐ Pro" : "Free"}
+    </span>
+  );
+
   return (
     <div className="anim-fadeIn">
       {/* Header */}
@@ -42,7 +62,10 @@ export default function AdminBookings({ bookings = [], bookingMeta = {} }) {
       </div>
 
       {/* Revenue KPI Cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:16, marginBottom:32 }}>
+      <div
+        className="vai-admin-kpi-grid"
+        style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:16, marginBottom:32 }}
+      >
         {[
           { label:"Total Revenue",  value:`PKR ${totalRevenue.toLocaleString()}`, icon:"💵", color:"#5CCC5C" },
           { label:"Paid Bookings",  value:paidCount,   icon:"✅", color:"#5CCC5C" },
@@ -51,14 +74,14 @@ export default function AdminBookings({ bookings = [], bookingMeta = {} }) {
         ].map(({ label, value, icon, color }) => (
           <div key={label} className="card" style={{ padding:"20px 24px" }}>
             <div style={{ fontSize:28, marginBottom:8 }}>{icon}</div>
-            <div style={{ fontSize:24, fontWeight:700, fontFamily:"'Playfair Display',serif", color, marginBottom:4 }}>{value}</div>
+            <div style={{ fontSize:22, fontWeight:700, fontFamily:"'Playfair Display',serif", color, marginBottom:4, wordBreak:"break-word" }}>{value}</div>
             <div style={{ fontSize:12, color:C.midGray }}>{label}</div>
           </div>
         ))}
       </div>
 
       {/* Filters */}
-      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+      <div className="vai-admin-filter-row" style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
         <div style={{ position:"relative", flex:1, minWidth:220 }}>
           <input placeholder="Search by user, email, trip or booking ID..." value={search} onChange={(e)=>setSearch(e.target.value)} style={{ paddingLeft:40 }} />
           <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:C.midGray }}>🔍</span>
@@ -71,53 +94,82 @@ export default function AdminBookings({ bookings = [], bookingMeta = {} }) {
         </select>
       </div>
 
-      {/* Table */}
-      <div className="card" style={{ overflow:"hidden" }}>
+      {/* Table + mobile cards */}
+      <div className="card vai-admin-table-wrap" style={{ overflow:"hidden" }}>
         {filtered.length === 0 ? (
           <div style={{ padding:"48px 32px", textAlign:"center", color:C.midGray, fontSize:14 }}>No transactions found.</div>
         ) : (
-          <table style={{ width:"100%", borderCollapse:"collapse" }}>
-            <thead>
-              <tr style={{ background:"rgba(255,255,255,0.02)", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-                {["BOOKING ID","USER","EMAIL","PLAN","TRIP","AMOUNT","DATE","STATUS"].map(h=>(
-                  <th key={h} style={{ padding:"14px 18px", fontSize:11, color:C.midGray, fontWeight:600, textAlign:"left", whiteSpace:"nowrap" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((b,i) => (
-                <tr key={b.id||i}
-                  style={{ borderBottom:"1px solid rgba(255,255,255,0.03)" }}
-                  onMouseEnter={(e)=>(e.currentTarget.style.background="rgba(140,50,50,0.04)")}
-                  onMouseLeave={(e)=>(e.currentTarget.style.background="transparent")}>
-                  <td style={{ padding:"13px 18px", fontSize:11, color:C.midGray, fontFamily:"'DM Mono',monospace" }}>{b.id||"—"}</td>
-                  <td style={{ padding:"13px 18px" }}>
-                    <div style={{ fontSize:14, fontWeight:600 }}>{b.user||"—"}</div>
-                    <div style={{ fontSize:11, color:C.midGray, marginTop:1 }}>
-                      {b.days && b.days !== "—" ? `${b.days}d trip` : "Subscription"}
-                    </div>
-                  </td>
-                  <td style={{ padding:"13px 18px", fontSize:12, color:C.midGray }}>{b.userEmail||"—"}</td>
-                  <td style={{ padding:"13px 18px" }}>
-                    <span style={{ fontSize:11, padding:"3px 8px", borderRadius:4, background:b.userPlan==="pro"?"rgba(50,180,50,0.12)":"rgba(255,255,255,0.05)", color:b.userPlan==="pro"?"#5CCC5C":C.midGray }}>
-                      {b.userPlan==="pro" ? "⭐ Pro" : "Free"}
-                    </span>
-                  </td>
-                  <td style={{ padding:"13px 18px", fontSize:13 }}>{b.trip||"—"}</td>
-                  <td style={{ padding:"13px 18px", fontSize:14, fontWeight:700, color:b.status==="Paid"?"#5CCC5C":C.offWhite }}>{b.amount||"—"}</td>
-                  <td style={{ padding:"13px 18px", fontSize:12, color:C.midGray, whiteSpace:"nowrap" }}>{b.date||"—"}</td>
-                  <td style={{ padding:"13px 18px" }}>
-                    <span style={{ padding:"4px 12px", borderRadius:20, fontSize:11, fontWeight:700, background:STATUS_STYLE[b.status]?.bg||"rgba(255,255,255,0.06)", color:STATUS_STYLE[b.status]?.color||C.midGray }}>
-                      {b.status||"—"}
-                    </span>
-                  </td>
+          <>
+            {/* Desktop table */}
+            <table className="vai-admin-table" style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ background:"rgba(255,255,255,0.02)", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+                  {["BOOKING ID","USER","EMAIL","PLAN","TRIP","AMOUNT","DATE","STATUS"].map(h=>(
+                    <th key={h} style={{ padding:"14px 18px", fontSize:11, color:C.midGray, fontWeight:600, textAlign:"left", whiteSpace:"nowrap" }}>{h}</th>
+                  ))}
                 </tr>
+              </thead>
+              <tbody>
+                {filtered.map((b,i) => (
+                  <tr key={b.id||i}
+                    style={{ borderBottom:"1px solid rgba(255,255,255,0.03)" }}
+                    onMouseEnter={(e)=>(e.currentTarget.style.background="rgba(140,50,50,0.04)")}
+                    onMouseLeave={(e)=>(e.currentTarget.style.background="transparent")}>
+                    <td style={{ padding:"13px 18px", fontSize:11, color:C.midGray, fontFamily:"'DM Mono',monospace" }}>{b.id||"—"}</td>
+                    <td style={{ padding:"13px 18px" }}>
+                      <div style={{ fontSize:14, fontWeight:600 }}>{b.user||"—"}</div>
+                      <div style={{ fontSize:11, color:C.midGray, marginTop:1 }}>
+                        {b.days && b.days !== "—" ? `${b.days}d trip` : "Subscription"}
+                      </div>
+                    </td>
+                    <td style={{ padding:"13px 18px", fontSize:12, color:C.midGray }}>{b.userEmail||"—"}</td>
+                    <td style={{ padding:"13px 18px" }}>{planPill(b.userPlan)}</td>
+                    <td style={{ padding:"13px 18px", fontSize:13 }}>{b.trip||"—"}</td>
+                    <td style={{ padding:"13px 18px", fontSize:14, fontWeight:700, color:b.status==="Paid"?"#5CCC5C":C.offWhite }}>{b.amount||"—"}</td>
+                    <td style={{ padding:"13px 18px", fontSize:12, color:C.midGray, whiteSpace:"nowrap" }}>{b.date||"—"}</td>
+                    <td style={{ padding:"13px 18px" }}>{statusPill(b.status)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Mobile cards */}
+            <div className="vai-admin-cards">
+              {filtered.map((b, i) => (
+                <div key={b.id || i} className="vai-admin-row-card">
+                  <div className="vai-row-head">
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: C.offWhite, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {b.user || "—"}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.midGray, marginTop: 2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {b.userEmail || "—"}
+                      </div>
+                    </div>
+                    {statusPill(b.status)}
+                  </div>
+
+                  <dl className="vai-row-meta">
+                    <dt>Booking</dt>
+                    <dd style={{ fontFamily: "'DM Mono', monospace", fontSize: 11 }}>{b.id || "—"}</dd>
+                    <dt>Trip</dt>
+                    <dd>{b.trip || "—"}{b.days && b.days !== "—" ? ` · ${b.days}d` : ""}</dd>
+                    <dt>Plan</dt>
+                    <dd>{planPill(b.userPlan)}</dd>
+                    <dt>Amount</dt>
+                    <dd style={{ fontWeight: 700, color: b.status === "Paid" ? "#5CCC5C" : C.offWhite, fontSize: 14 }}>
+                      {b.amount || "—"}
+                    </dd>
+                    <dt>Date</dt>
+                    <dd>{b.date || "—"}</dd>
+                  </dl>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
         {filtered.length > 0 && (
-          <div style={{ padding:"12px 18px", borderTop:"1px solid rgba(255,255,255,0.05)", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ padding:"12px 18px", borderTop:"1px solid rgba(255,255,255,0.05)", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
             <span style={{ fontSize:13, color:C.midGray }}>Showing {filtered.length} of {bookings.length} transactions</span>
             <span style={{ fontSize:13, color:"#5CCC5C", fontWeight:600 }}>Total Paid: PKR {totalRevenue.toLocaleString()}</span>
           </div>

@@ -14,28 +14,6 @@ import {
   ReferenceLine,
 } from "recharts";
 
-/**
- * AdminMLAnalytics — Day 5C ML model performance dashboard.
- *
- * Surfaces three perspectives on the cost-prediction model:
- *
- *   1. Training metrics (R², MAE, RMSE) — what the model achieved on the
- *      held-out test set during training. Cite-able numbers for reports.
- *
- *   2. Real-world performance — how the model compares to Gemini's
- *      cost estimates on actual user-generated trips. Includes a
- *      "within range" accuracy %, which captures how often the model
- *      successfully validated Gemini's number.
- *
- *   3. Regional breakdown — average prediction error per destination,
- *      so admin can spot which regions need more training data.
- *
- * The scatter chart is the marquee visual: each dot is a real trip,
- * positioned by (predicted, actual). Points on the diagonal = perfect
- * prediction. Visually, the closer the cloud hugs the diagonal, the
- * better the model is performing in production.
- */
-
 const fmtPKR = (n) => `PKR ${Math.round(n || 0).toLocaleString()}`;
 const fmtCompact = (n) => {
   const v = Number(n) || 0;
@@ -89,16 +67,13 @@ export default function AdminMLAnalytics() {
     );
   }
 
-  // Compute scatter chart axis bounds — round up nicely so axes look clean
   const allValues = points.flatMap((p) => [p.predicted, p.actual]).filter((v) => v > 0);
   const dataMax = allValues.length > 0 ? Math.max(...allValues) : 100000;
-  const axisMax = Math.ceil(dataMax / 50000) * 50000; // round up to nearest 50k
+  const axisMax = Math.ceil(dataMax / 50000) * 50000;
 
-  // Split points by withinRange for color-coding the scatter
   const inRangePoints  = points.filter((p) => p.withinRange);
   const outRangePoints = points.filter((p) => !p.withinRange);
 
-  // Stat cards data
   const r2          = meta?.meta?.metrics?.r2;
   const mae         = meta?.meta?.metrics?.mae;
   const rmse        = meta?.meta?.metrics?.rmse;
@@ -145,7 +120,6 @@ export default function AdminMLAnalytics() {
 
   return (
     <div className="anim-fadeIn">
-      {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <p className="section-label">Operations</p>
         <h2 className="display-heading" style={{ fontSize: 28 }}>ML Analytics</h2>
@@ -154,7 +128,6 @@ export default function AdminMLAnalytics() {
         </p>
       </div>
 
-      {/* Service-down warning */}
       {meta && !meta.available && (
         <div className="card" style={{
           padding: 14,
@@ -180,16 +153,19 @@ export default function AdminMLAnalytics() {
       )}
 
       {/* Stat cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 24 }}>
+      <div
+        className="vai-admin-grid-1col"
+        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 24 }}
+      >
         {statCards.map((s) => (
           <div key={s.label} className="card" style={{ padding: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-              <div style={{ color: s.accent }}>{s.icon}</div>
-              <div style={{ fontSize: 11, color: C.midGray, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 8 }}>
+              <div style={{ color: s.accent, flexShrink: 0 }}>{s.icon}</div>
+              <div style={{ fontSize: 11, color: C.midGray, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", textAlign: "right", minWidth: 0 }}>
                 {s.sub}
               </div>
             </div>
-            <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Playfair Display', serif", marginBottom: 4, color: C.offWhite }}>
+            <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display', serif", marginBottom: 4, color: C.offWhite, wordBreak: "break-word" }}>
               {s.value}
             </div>
             <div style={{ fontSize: 12, color: C.midGray }}>{s.label}</div>
@@ -198,10 +174,12 @@ export default function AdminMLAnalytics() {
       </div>
 
       {/* Charts row */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 24 }}>
-        {/* Scatter — Predicted vs Actual */}
-        <div className="card" style={{ padding: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+      <div
+        className="vai-admin-grid-1col"
+        style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 24 }}
+      >
+        <div className="card" style={{ padding: 24, minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
             <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, color: C.offWhite }}>
               Predicted vs Actual Cost
             </h3>
@@ -288,7 +266,6 @@ export default function AdminMLAnalytics() {
                       );
                     }}
                   />
-                  {/* Diagonal reference line: y = x */}
                   <ReferenceLine
                     segment={[{ x: 0, y: 0 }, { x: axisMax, y: axisMax }]}
                     stroke="rgba(255,255,255,0.25)"
@@ -303,8 +280,7 @@ export default function AdminMLAnalytics() {
           )}
         </div>
 
-        {/* Model card */}
-        <div className="card" style={{ padding: 24 }}>
+        <div className="card" style={{ padding: 24, minWidth: 0 }}>
           <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, marginBottom: 4, color: C.offWhite }}>
             Model Details
           </h3>
@@ -322,7 +298,6 @@ export default function AdminMLAnalytics() {
         </div>
       </div>
 
-      {/* Regional accuracy */}
       <div className="card" style={{ padding: 24, marginBottom: 24 }}>
         <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, marginBottom: 4, color: C.offWhite }}>
           Accuracy by Destination
@@ -347,11 +322,11 @@ export default function AdminMLAnalytics() {
                 : "#FF8080";
               return (
                 <div key={`${r.destination}-${i}`}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, color: C.offWhite, fontWeight: 500, textTransform: "capitalize" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, color: C.offWhite, fontWeight: 500, textTransform: "capitalize", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
                       {r.destination}
                     </span>
-                    <span style={{ fontSize: 11, color: C.midGray, fontFamily: "'DM Mono', monospace" }}>
+                    <span style={{ fontSize: 11, color: C.midGray, fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
                       {r.tripCount} {r.tripCount === 1 ? "trip" : "trips"} · drift {r.avgAbsDeltaPercent}%
                     </span>
                   </div>
@@ -364,7 +339,7 @@ export default function AdminMLAnalytics() {
                       transition: "width 0.5s ease",
                     }} />
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.midGray }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.midGray, gap: 8, flexWrap: "wrap" }}>
                     <span>Predicted avg: {fmtPKR(r.avgPredicted)}</span>
                     <span>Gemini avg: {fmtPKR(r.avgActual)}</span>
                   </div>
@@ -375,7 +350,6 @@ export default function AdminMLAnalytics() {
         )}
       </div>
 
-      {/* Methodology card */}
       <div className="card" style={{ padding: 18, background: "rgba(168,119,212,0.04)", border: "1px solid rgba(168,119,212,0.15)" }}>
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
           <div style={{ fontSize: 18 }}>🧠</div>
@@ -388,16 +362,17 @@ export default function AdminMLAnalytics() {
   );
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────
-
 function ModelDetailRow({ label, value, mono }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-      <span style={{ color: C.midGray, fontSize: 12 }}>{label}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.05)", gap: 8 }}>
+      <span style={{ color: C.midGray, fontSize: 12, flexShrink: 0 }}>{label}</span>
       <span style={{
         color: C.offWhite,
         fontSize: 13,
         fontFamily: mono ? "'DM Mono', monospace" : "'DM Sans', sans-serif",
+        textAlign: "right",
+        wordBreak: "break-word",
+        minWidth: 0,
       }}>
         {value}
       </span>

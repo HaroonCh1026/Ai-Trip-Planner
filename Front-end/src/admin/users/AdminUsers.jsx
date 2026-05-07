@@ -7,7 +7,6 @@ import ConfirmModal from "../../components/ui/ConfirmModal";
 
 export default function AdminUsers({ users, setUsers }) {
   const [search, setSearch] = useState("");
-  // Day 6: replace native alert() / window.confirm() with styled UI
   const [toast, setToast]     = useState(null);
   const [confirm, setConfirm] = useState(null);
 
@@ -46,6 +45,37 @@ export default function AdminUsers({ users, setUsers }) {
     });
   };
 
+  // Reusable action button styles for both desktop table and mobile cards
+  const blockBtnStyle = (status) => ({
+    padding: "6px 14px",
+    borderRadius: 6,
+    border: `1px solid ${status === "Active" ? C.crimson : "#5CCC5C"}`,
+    background: "transparent",
+    color: status === "Active" ? C.crimson : "#5CCC5C",
+    fontSize: 12,
+    cursor: "pointer",
+    fontFamily: "'DM Sans', sans-serif",
+  });
+  const deleteBtnStyle = {
+    padding: "6px 14px",
+    borderRadius: 6,
+    border: "1px solid rgba(255,255,255,0.1)",
+    background: "transparent",
+    color: C.midGray,
+    fontSize: 12,
+    cursor: "pointer",
+    fontFamily: "'DM Sans', sans-serif",
+  };
+  const statusPillStyle = (status) => ({
+    padding: "4px 12px",
+    borderRadius: 20,
+    fontSize: 11,
+    fontWeight: 600,
+    background: status === "Active" ? "rgba(80,200,80,0.1)" : "rgba(224,92,92,0.1)",
+    color: status === "Active" ? "#5CCC5C" : C.crimson,
+    whiteSpace: "nowrap",
+  });
+
   return (
     <>
     <div className="anim-fadeIn">
@@ -69,9 +99,11 @@ export default function AdminUsers({ users, setUsers }) {
         </div>
       </div>
 
-      <div className="card" style={{ overflow: "hidden" }}>
+      <div className="card vai-admin-table-wrap" style={{ overflow: "hidden" }}>
         <style>{`.hover-row:hover { background: rgba(140,50,50,0.03); }`}</style>
-        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+
+        {/* Desktop: table (hidden on phone via vai-admin-table-wrap rule) */}
+        <table className="vai-admin-table" style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
           <thead>
             <tr
               style={{
@@ -104,50 +136,14 @@ export default function AdminUsers({ users, setUsers }) {
                 <td style={{ padding: "16px 24px", fontSize: 13, color: C.midGray }}>{u.joined}</td>
                 <td style={{ padding: "16px 24px", fontSize: 13, color: C.midGray }}>{u.trips}</td>
                 <td style={{ padding: "16px 24px" }}>
-                  <span
-                    style={{
-                      padding: "4px 12px",
-                      borderRadius: 20,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      background:
-                        u.status === "Active"
-                          ? "rgba(80,200,80,0.1)"
-                          : "rgba(224,92,92,0.1)",
-                      color: u.status === "Active" ? "#5CCC5C" : C.crimson,
-                    }}
-                  >
-                    {u.status}
-                  </span>
+                  <span style={statusPillStyle(u.status)}>{u.status}</span>
                 </td>
                 <td style={{ padding: "16px 24px" }}>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      onClick={() => toggleStatus(u.id, u.status)}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: 6,
-                        border: `1px solid ${u.status === "Active" ? C.crimson : "#5CCC5C"}`,
-                        background: "transparent",
-                        color: u.status === "Active" ? C.crimson : "#5CCC5C",
-                        fontSize: 12,
-                        cursor: "pointer",
-                      }}
-                    >
+                    <button onClick={() => toggleStatus(u.id, u.status)} style={blockBtnStyle(u.status)}>
                       {u.status === "Active" ? "Block" : "Unblock"}
                     </button>
-                    <button
-                      onClick={() => deleteUser(u.id)}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: 6,
-                        border: "1px solid rgba(255,255,255,0.1)",
-                        background: "transparent",
-                        color: C.midGray,
-                        fontSize: 12,
-                        cursor: "pointer",
-                      }}
-                    >
+                    <button onClick={() => deleteUser(u.id)} style={deleteBtnStyle}>
                       Delete
                     </button>
                   </div>
@@ -156,6 +152,63 @@ export default function AdminUsers({ users, setUsers }) {
             ))}
           </tbody>
         </table>
+
+        {/* Mobile: card list (hidden on desktop, only shown via vai-admin-cards rule) */}
+        <div className="vai-admin-cards">
+          {filtered.length === 0 && (
+            <div style={{ padding: 16, color: C.midGray, fontSize: 13, textAlign: "center" }}>
+              No users match your search.
+            </div>
+          )}
+          {filtered.map((u) => (
+            <div key={u.id} className="vai-admin-row-card">
+              <div className="vai-row-head">
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: C.offWhite,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {u.name}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: C.midGray,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                      marginTop: 2,
+                    }}
+                  >
+                    {u.email}
+                  </div>
+                </div>
+                <span style={statusPillStyle(u.status)}>{u.status}</span>
+              </div>
+
+              <dl className="vai-row-meta">
+                <dt>Role</dt><dd>{u.role}</dd>
+                <dt>Joined</dt><dd>{u.joined}</dd>
+                <dt>Trips</dt><dd>{u.trips}</dd>
+              </dl>
+
+              <div className="vai-row-actions">
+                <button onClick={() => toggleStatus(u.id, u.status)} style={blockBtnStyle(u.status)}>
+                  {u.status === "Active" ? "Block" : "Unblock"}
+                </button>
+                <button onClick={() => deleteUser(u.id)} style={deleteBtnStyle}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
     <Toast toast={toast} onClose={() => setToast(null)} />

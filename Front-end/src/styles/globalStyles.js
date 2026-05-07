@@ -392,4 +392,361 @@ export const globalStyles = `
     color: ${C.crimsonLight};
     background: rgba(140,50,50,0.12);
   }
+    /* ─────────────────────────────────────────────────────────────
+     UI Round 4 — Admin Panel mobile responsiveness (<=480px)
+     Additive only. Desktop (>480px) is unchanged.
+     ───────────────────────────────────────────────────────────── */
+
+  /* The grid wrapper — desktop default = 260px sidebar + content */
+  .vai-admin-shell {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    min-height: 100vh;
+  }
+
+  /* Sidebar shows by default; mobile hamburger hides on desktop */
+  .vai-admin-sidebar { display: flex; }
+  .vai-admin-hamburger { display: none; }
+  .vai-admin-backdrop { display: none; }
+
+  /* Header default — title row is a normal flex row */
+  .vai-admin-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 40px;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .vai-admin-content-pad {
+    padding: 32px 40px;
+  }
+
+  /* Mobile overrides */
+  @media (max-width: 480px) {
+    .vai-admin-shell {
+      grid-template-columns: 1fr !important;
+    }
+
+    /* Sidebar becomes a slide-in drawer. Hidden by default;
+       opens via .is-open toggle from AdminPanel.jsx. */
+    .vai-admin-sidebar {
+      position: fixed !important;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: min(280px, 80vw);
+      z-index: 200;
+      transform: translateX(-100%);
+      transition: transform 0.22s ease;
+    }
+    .vai-admin-sidebar.is-open {
+      transform: translateX(0);
+      box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+    }
+
+    /* Backdrop behind the open drawer */
+    .vai-admin-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 150;
+      animation: fadeIn 0.18s ease-out;
+    }
+
+    /* Hamburger button shows on mobile */
+    .vai-admin-hamburger {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      color: ${C.offWhite};
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .vai-admin-hamburger:hover {
+      background: rgba(140,50,50,0.18);
+      border-color: ${C.crimson};
+    }
+
+    /* Header tightens up */
+    .vai-admin-header-row {
+      margin-bottom: 24px !important;
+      gap: 12px !important;
+    }
+    .vai-admin-header-row h1 {
+      font-size: 22px !important;
+    }
+    .vai-admin-header-row p {
+      font-size: 12px !important;
+    }
+    .vai-admin-content-pad {
+      padding: 16px 14px !important;
+    }
+
+    /* Admin stat cards: 1 column on phones */
+    .vai-admin-stats {
+      grid-template-columns: 1fr !important;
+      gap: 12px !important;
+      margin-bottom: 20px !important;
+    }
+    .vai-admin-stats .card {
+      padding: 18px !important;
+    }
+
+    /* The chart + regions split goes 1 column */
+    .vai-admin-twocol {
+      grid-template-columns: 1fr !important;
+      gap: 14px !important;
+      margin-bottom: 16px !important;
+    }
+    .vai-admin-twocol .card {
+      padding: 18px !important;
+    }
+    .vai-admin-twocol h3 {
+      font-size: 16px !important;
+      margin-bottom: 14px !important;
+    }
+
+    /* Chart bars: smaller min-gap, scrollable if cramped */
+    .vai-admin-chart {
+      height: 130px !important;
+      gap: 3px !important;
+    }
+  }
+    /* ─────────────────────────────────────────────────────────────
+     UI Round 5 — Admin inner-page mobile helpers (<=480px)
+     Reusable across AdminUsers, AdminBookings, AdminPricing, etc.
+     ───────────────────────────────────────────────────────────── */
+
+  /* Force any auto-fit grid to a single column on phones. Apply this
+     class to the existing grid div in addition to its inline styles —
+     the !important here beats the inline gridTemplateColumns. */
+  @media (max-width: 480px) {
+    .vai-admin-grid-1col {
+      grid-template-columns: 1fr !important;
+      gap: 12px !important;
+    }
+
+    /* Filter row: search + selects stack full-width */
+    .vai-admin-filter-row {
+      flex-direction: column !important;
+      gap: 10px !important;
+    }
+    .vai-admin-filter-row > * {
+      width: 100% !important;
+      min-width: 0 !important;
+    }
+
+    /* Mobile table → card list switcher.
+       Add .vai-admin-table-wrap to the card-around-table div.
+       Add .vai-admin-table to the <table>.
+       Add .vai-admin-cards to the alternate card list (renders only on mobile). */
+    .vai-admin-table-wrap .vai-admin-table { display: none !important; }
+    .vai-admin-table-wrap .vai-admin-cards { display: flex !important; }
+
+    /* Pricing section header: title + summary stack inside its row
+       so the chevron stays right-aligned and nothing truncates. */
+    .vai-admin-section-head {
+      padding: 14px 16px !important;
+    }
+    .vai-admin-section-head .vai-admin-section-title {
+      font-size: 15px !important;
+    }
+    .vai-admin-section-head .vai-admin-section-summary {
+      white-space: normal !important;
+      font-size: 11px !important;
+      line-height: 1.45 !important;
+    }
+    .vai-admin-section-body {
+      padding: 0 16px 18px !important;
+    }
+
+    /* Pricing action row: stack on mobile, full-width buttons */
+    .vai-admin-action-row {
+      flex-direction: column-reverse !important;
+      gap: 8px !important;
+    }
+    .vai-admin-action-row > button {
+      width: 100% !important;
+    }
+
+    /* KPI strip: 2 cols on phone (instead of 4) so values stay legible */
+    .vai-admin-kpi-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 10px !important;
+    }
+    .vai-admin-kpi-grid .card {
+      padding: 14px !important;
+    }
+  }
+
+  /* Mobile-only card list: hidden on desktop, shown only inside
+     .vai-admin-table-wrap on mobile (handled by media query above). */
+  .vai-admin-cards {
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+  .vai-admin-row-card {
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .vai-admin-row-card .vai-row-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .vai-admin-row-card .vai-row-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 10px;
+    font-size: 12px;
+  }
+  .vai-admin-row-card .vai-row-meta dt {
+    color: ${C.midGray};
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 10px;
+  }
+  .vai-admin-row-card .vai-row-meta dd {
+    color: ${C.offWhite};
+    word-break: break-word;
+  }
+  .vai-admin-row-card .vai-row-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .vai-admin-row-card .vai-row-actions > button {
+    flex: 1;
+    min-width: 0;
+  }
+    /* ─────────────────────────────────────────────────────────────
+     UI Round 6 — AdminSupport + AdminBlogs mobile helpers (<=480px)
+     Additive only.
+     ───────────────────────────────────────────────────────────── */
+
+  @media (max-width: 480px) {
+    /* AdminSupport — split pane becomes single column.
+       Thread panel becomes a fullscreen overlay. */
+    .vai-admin-support-grid {
+      grid-template-columns: 1fr !important;
+      gap: 0 !important;
+    }
+    .vai-admin-thread-panel {
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 250 !important;
+      height: 100vh !important;
+      max-height: 100vh !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+    }
+
+    /* Status filter chips wrap to 2 rows neatly */
+    .vai-admin-support-filters {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 10px !important;
+    }
+    .vai-admin-support-filters > .vai-admin-search {
+      width: 100% !important;
+      min-width: 0 !important;
+    }
+    .vai-admin-support-filter-chips {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      gap: 6px !important;
+    }
+    .vai-admin-support-filter-chips > button {
+      flex: 1 1 calc(50% - 3px) !important;
+      min-width: 0 !important;
+      padding: 8px 10px !important;
+      font-size: 12px !important;
+    }
+
+    /* Ticket list rows tighten */
+    .vai-admin-ticket-row {
+      padding: 14px 16px !important;
+    }
+
+    /* Thread panel: status-change buttons wrap */
+    .vai-admin-thread-actions {
+      flex-wrap: wrap !important;
+    }
+
+    /* AdminBlogs — form layout single column */
+    .vai-admin-blog-form-grid {
+      grid-template-columns: 1fr !important;
+      gap: 16px !important;
+    }
+
+    /* Blog list header: title row + new post button stack */
+    .vai-admin-blog-header {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 12px !important;
+    }
+    .vai-admin-blog-header > button {
+      width: 100% !important;
+      justify-content: center !important;
+    }
+
+    /* Blog card grid → 1 column */
+    .vai-admin-blog-grid {
+      grid-template-columns: 1fr !important;
+      gap: 14px !important;
+    }
+
+    /* Blog card footer: author/readtime stack above the action row */
+    .vai-admin-blog-card-footer {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 12px !important;
+    }
+    .vai-admin-blog-card-footer .vai-blog-meta {
+      font-size: 11px !important;
+    }
+    .vai-admin-blog-card-footer .vai-blog-actions {
+      display: flex !important;
+      gap: 6px !important;
+    }
+    .vai-admin-blog-card-footer .vai-blog-actions > button {
+      flex: 1 !important;
+      padding: 8px 6px !important;
+      min-width: 0 !important;
+    }
+  }
+    /* ─────────────────────────────────────────────────────────────
+     UI Round 7 — AdminLogs row layout helper (<=480px)
+     Reuses existing helpers for the rest.
+     ───────────────────────────────────────────────────────────── */
+
+  @media (max-width: 480px) {
+    /* Log row: 3-col grid (icon · details · timestamp) → stack timestamp
+       under the details so neither column gets squished. */
+    .vai-admin-log-row {
+      grid-template-columns: auto 1fr !important;
+      gap: 10px !important;
+      padding: 14px 16px !important;
+    }
+    .vai-admin-log-row .vai-log-time {
+      grid-column: 1 / -1 !important;
+      padding-left: 30px !important;
+      font-size: 11px !important;
+    }
+  }
 `;

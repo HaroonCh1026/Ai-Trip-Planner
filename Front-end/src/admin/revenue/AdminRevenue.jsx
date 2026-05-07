@@ -11,29 +11,10 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  Cell,
 } from "recharts";
-
-/**
- * AdminRevenue — Day 5B revenue analytics dashboard.
- *
- * Two metrics shown side-by-side throughout:
- *   • GMV (Gross Merchandise Value): total PKR flowing through the platform
- *   • Net Revenue (fee earnings): the platform's actual take (8% by default)
- *
- * This split is standard for marketplace platforms (Airbnb, Booking, Uber)
- * and tells two different stories — GMV measures user activity / market
- * size, fee revenue measures business sustainability.
- *
- * Data source: aggregations on the Booking collection. Pure read — no
- * writes from this page. Re-fetches on mount, no auto-refresh (admin can
- * reload manually if they want fresher data).
- */
 
 const fmtPKR = (n) => `PKR ${Math.round(n || 0).toLocaleString()}`;
 const fmtPKRcompact = (n) => {
-  // Compact form for chart axes: "12.5k" / "1.2M". Keeps the chart readable
-  // even when numbers run into the millions of PKR.
   const v = Number(n) || 0;
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000)     return `${(v / 1_000).toFixed(0)}k`;
@@ -53,7 +34,6 @@ export default function AdminRevenue() {
       setLoading(true);
       setError("");
       try {
-        // Three parallel requests — all on /admin/revenue/*
         const [s, m, d] = await Promise.all([
           api.get("/admin/revenue/summary"),
           api.get("/admin/revenue/monthly"),
@@ -72,7 +52,6 @@ export default function AdminRevenue() {
     return () => { cancelled = true; };
   }, []);
 
-  // ── Loading state ───────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="anim-fadeIn">
@@ -87,10 +66,8 @@ export default function AdminRevenue() {
     );
   }
 
-  // ── Empty state — no paid bookings yet ──────────────────────────────────
   const hasData = summary && summary.paidBookings > 0;
 
-  // ── Stat card definitions ───────────────────────────────────────────────
   const statCards = summary
     ? [
         {
@@ -105,7 +82,7 @@ export default function AdminRevenue() {
           value: fmtPKR(summary.feeRevenue),
           sub: `${summary.impliedTakeRatePercent}% effective take`,
           icon: <Icon.sparkle />,
-          accent: "#A877D4",  // purple — visually distinct from GMV
+          accent: "#A877D4",
         },
         {
           label: "Avg Booking Value",
@@ -126,14 +103,10 @@ export default function AdminRevenue() {
       ]
     : [];
 
-  // ── Top destination chart data ──────────────────────────────────────────
-  // We render destinations as a horizontal bar list (more readable than
-  // recharts horizontal bar chart for variable-length destination names).
   const maxDestGmv = Math.max(...destinations.map((d) => d.gmv), 1);
 
   return (
     <div className="anim-fadeIn">
-      {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <p className="section-label">Operations</p>
         <h2 className="display-heading" style={{ fontSize: 28 }}>Revenue Analytics</h2>
@@ -142,14 +115,12 @@ export default function AdminRevenue() {
         </p>
       </div>
 
-      {/* Error banner */}
       {error && (
         <div role="alert" style={{ marginBottom: 20, padding: 12, color: "#FF8080", background: "rgba(255,128,128,0.08)", border: "1px solid rgba(255,128,128,0.4)", borderRadius: 6, fontSize: 13 }}>
           {error}
         </div>
       )}
 
-      {/* Empty state */}
       {!hasData && !error && (
         <div className="card" style={{ padding: 40, textAlign: "center" }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>📊</div>
@@ -162,18 +133,20 @@ export default function AdminRevenue() {
         </div>
       )}
 
-      {/* Stat cards */}
       {hasData && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 24 }}>
+        <div
+          className="vai-admin-grid-1col"
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20, marginBottom: 24 }}
+        >
           {statCards.map((s) => (
             <div key={s.label} className="card" style={{ padding: 24 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-                <div style={{ color: s.accent }}>{s.icon}</div>
-                <div style={{ fontSize: 11, color: C.midGray, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 8 }}>
+                <div style={{ color: s.accent, flexShrink: 0 }}>{s.icon}</div>
+                <div style={{ fontSize: 11, color: C.midGray, fontWeight: 600, padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", textAlign: "right", minWidth: 0 }}>
                   {s.sub}
                 </div>
               </div>
-              <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Playfair Display', serif", marginBottom: 4, color: C.offWhite }}>
+              <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Playfair Display', serif", marginBottom: 4, color: C.offWhite, wordBreak: "break-word" }}>
                 {s.value}
               </div>
               <div style={{ fontSize: 12, color: C.midGray }}>{s.label}</div>
@@ -182,12 +155,13 @@ export default function AdminRevenue() {
         </div>
       )}
 
-      {/* Charts row */}
       {hasData && (
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 24 }}>
-          {/* Monthly trend — recharts dual-bar */}
-          <div className="card" style={{ padding: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+        <div
+          className="vai-admin-grid-1col"
+          style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 24 }}
+        >
+          <div className="card" style={{ padding: 24, minWidth: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
               <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, color: C.offWhite }}>
                 Monthly Revenue Trend
               </h3>
@@ -226,8 +200,8 @@ export default function AdminRevenue() {
                     labelStyle={{ color: C.offWhite, marginBottom: 4 }}
                     itemStyle={{ color: C.offWhite }}
                     formatter={(value, name) => {
-                      if (name === "GMV")        return [fmtPKR(value), "GMV"];
-                      if (name === "Net")        return [fmtPKR(value), "Net Revenue"];
+                      if (name === "GMV") return [fmtPKR(value), "GMV"];
+                      if (name === "Net") return [fmtPKR(value), "Net Revenue"];
                       return [value, name];
                     }}
                     labelFormatter={(_, payload) => {
@@ -240,15 +214,14 @@ export default function AdminRevenue() {
                     iconType="circle"
                     iconSize={8}
                   />
-                  <Bar dataKey="gmv"        name="GMV" fill={C.crimson}  radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="feeRevenue" name="Net" fill="#A877D4"    radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="gmv"        name="GMV" fill={C.crimson} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="feeRevenue" name="Net" fill="#A877D4"   radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Top destinations sidebar */}
-          <div className="card" style={{ padding: 24 }}>
+          <div className="card" style={{ padding: 24, minWidth: 0 }}>
             <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, marginBottom: 4, color: C.offWhite }}>
               Top Destinations
             </h3>
@@ -265,11 +238,11 @@ export default function AdminRevenue() {
                   const widthPct = (d.gmv / maxDestGmv) * 100;
                   return (
                     <div key={`${d.destination}-${i}`}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                        <span style={{ fontSize: 13, color: C.offWhite, fontWeight: 500, textTransform: "capitalize" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 13, color: C.offWhite, fontWeight: 500, textTransform: "capitalize", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth: 0 }}>
                           {d.destination}
                         </span>
-                        <span style={{ fontSize: 11, color: C.midGray, fontFamily: "'DM Mono', monospace" }}>
+                        <span style={{ fontSize: 11, color: C.midGray, fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
                           {d.bookings} {d.bookings === 1 ? "booking" : "bookings"}
                         </span>
                       </div>
@@ -282,7 +255,7 @@ export default function AdminRevenue() {
                           transition: "width 0.5s ease",
                         }} />
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.midGray }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.midGray, gap: 8, flexWrap: "wrap" }}>
                         <span>GMV: {fmtPKR(d.gmv)}</span>
                         <span style={{ color: "#A877D4" }}>Net: {fmtPKR(d.feeRevenue)}</span>
                       </div>
@@ -295,7 +268,6 @@ export default function AdminRevenue() {
         </div>
       )}
 
-      {/* Bottom info bar — explains the metrics */}
       {hasData && (
         <div className="card" style={{ padding: 18, background: "rgba(168,119,212,0.04)", border: "1px solid rgba(168,119,212,0.15)" }}>
           <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
