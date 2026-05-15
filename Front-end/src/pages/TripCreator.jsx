@@ -135,7 +135,7 @@ export default function TripCreator({ user, appConfig, onBack, onComplete }) {
             You've used all {FREE_LIMIT} free trips
           </h1>
           <p style={{ color: C.midGray, fontSize: 15, lineHeight: 1.7, marginBottom: 36 }}>
-            Upgrade to <strong style={{ color: C.offWhite }}>VoyageurAI Pro</strong> for unlimited AI-powered itinerary generation, priority support, and advanced planning features.
+            Upgrade to <strong style={{ color: C.offWhite }}>AI Trip Planner Pro</strong> for unlimited AI-powered itinerary generation, priority support, and advanced planning features.
           </p>
           <div className="card" style={{ padding: "24px 28px", textAlign: "left", marginBottom: 24 }}>
             {["Unlimited AI itinerary generation", "Priority support & faster responses", "Export itineraries as PDF", "Exclusive destination insights"].map((f) => (

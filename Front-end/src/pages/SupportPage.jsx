@@ -130,7 +130,7 @@ export default function SupportPage({ user, onBack }) {
       <div style={{ background: "rgba(13,13,13,0.95)", borderBottom: `1px solid rgba(140,50,50,0.2)`, padding: "0 5%", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50, backdropFilter: "blur(20px)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 28, height: 28, background: C.crimson, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}><Icon.plane /></div>
-          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700 }}>Voyageur<span style={{ color: C.crimson }}>AI</span></span>
+          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, fontWeight: 700 }}><span style={{ color: C.crimson }}>AI</span> Trip Planner</span>
         </div>
         <button onClick={onBack} style={{ background: "transparent", border: "none", color: C.midGray, cursor: "pointer", fontSize: 13, fontFamily: "'DM Sans', sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
           <Icon.arrowLeft width="16" height="16" /> {user ? "Dashboard" : "Home"}

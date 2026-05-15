@@ -66,7 +66,7 @@ export default function BlogDetailPage({ onBack }) {
           <button onClick={onBack} className="btn-secondary" style={{ fontSize: 13 }}>
             <Icon.arrowLeft width="16" height="16" /> Back to Home
           </button>
-          <span style={{ fontSize: 12, color: C.midGray }}>VoyageurAI Travel Insights</span>
+          <span style={{ fontSize: 12, color: C.midGray }}>AI Trip Planner Travel Insights</span>
         </div>
       </div>
     </div>

@@ -222,7 +222,7 @@ export default function ItineraryView({ trip, onBack }) {
               {/* Top — branded logo */}
               <div>
                 <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 28, fontWeight: 700, color: C.offWhite }}>
-                  Voyageur<span style={{ color: C.crimson }}>AI</span>
+                  <span style={{ color: C.crimson }}>AI</span> Trip Planner
                 </div>
                 <div style={{ fontSize: 11, color: C.midGray, textTransform: "uppercase", letterSpacing: "0.15em", marginTop: 4 }}>
                   Pakistan AI Travel Planner
@@ -638,13 +638,14 @@ export default function ItineraryView({ trip, onBack }) {
               {/* Branded sign-off */}
               <div style={{ textAlign: "center", paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                 <div style={{ fontFamily: "Georgia, serif", fontSize: 18, fontWeight: 700, color: C.offWhite, marginBottom: 4 }}>
-                  Voyageur<span style={{ color: C.crimson }}>AI</span>
+                 <span style={{ color: C.crimson }}>AI</span> Trip Planner
+
                 </div>
                 <div style={{ fontSize: 11, color: C.midGray, letterSpacing: "0.1em" }}>
                   Your AI-powered Pakistan travel companion
                 </div>
                 <div style={{ fontSize: 10, color: C.midGray, marginTop: 8 }}>
-                  Generated {new Date().toLocaleDateString("en-PK", { year: "numeric", month: "short", day: "numeric" })} · voyageurai.com
+                  Generated {new Date().toLocaleDateString("en-PK", { year: "numeric", month: "short", day: "numeric" })}  · aitourplanner.com
                 </div>
               </div>
             </div>

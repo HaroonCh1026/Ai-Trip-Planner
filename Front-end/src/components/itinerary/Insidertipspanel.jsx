@@ -275,7 +275,7 @@ export default function InsiderTipsPanel({ trip, isPro, onUpgradeClick }) {
             }}
           >
             <div style={{ fontSize: 11, color: C.midGray, fontStyle: "italic" }}>
-              Curated for {insights.destination || trip.destination} · Powered by VoyageurAI Insights
+              Curated for {insights.destination || trip.destination} · Powered by AI Trip Planner Insights
             </div>
             <button
               onClick={handleLoad}

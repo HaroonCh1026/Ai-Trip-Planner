@@ -5,7 +5,7 @@ import api from "../../api/client";
 import Toast from "../../components/ui/Toast";
 import ConfirmModal from "../../components/ui/ConfirmModal";
 
-const BLANK = { title: "", excerpt: "", content: "", image: "", category: "Travel Tips", author: "VoyageurAI Team", readTime: "5 min read", published: true };
+const BLANK = { title: "", excerpt: "", content: "", image: "", category: "Travel Tips", author: "AI Trip Planner Team", readTime: "5 min read", published: true };
 const CATS = ["Travel Tips", "Destination Guide", "Food & Culture", "Adventure", "Budget Travel", "Itinerary Ideas"];
 
 export default function AdminBlogs({ blogs, setBlogs }) {

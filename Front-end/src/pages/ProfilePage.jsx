@@ -844,7 +844,7 @@ export default function ProfilePage({
                 Notifications
               </h2>
               <p style={{ color: C.midGray, fontSize: 13, marginBottom: 28 }}>
-                Control how VoyageurAI communicates with you
+                Control how AI Trip Planner communicates with you
               </p>
               {[
                 {
@@ -1194,7 +1194,7 @@ export default function ProfilePage({
                   Sign Out
                 </h2>
                 <p style={{ color: C.midGray, fontSize: 13, marginBottom: 20 }}>
-                  Sign out of your VoyageurAI account on this device.
+                  Sign out of your AI Trip Planner account on this device.
                 </p>
                 <button
                   onClick={onLogout}

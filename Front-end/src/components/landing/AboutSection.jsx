@@ -18,7 +18,7 @@ export default function AboutSection() {
             Architecture
           </h2>
           <p style={{ color: C.midGray, fontSize: 16, lineHeight: 1.8, marginBottom: 24 }}>
-            Founded in Lahore, VoyageurAI is a specialized travel intelligence firm dedicated to decoding the logistical complexities of Pakistan. 
+           Founded in Lahore, AI Trip Planner is a specialized travel intelligence firm dedicated to decoding the logistical complexities of Pakistan. 
             We combine state-of-the-art Google Gemini AI with deep local knowledge to architect experiences that are not only breathtaking but strategically sound.
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>

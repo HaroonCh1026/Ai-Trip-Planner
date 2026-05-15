@@ -192,7 +192,7 @@ export default function CostComparisonPanel({ trip }) {
 
       {/* Subtle branded sign-off — no technical machinery */}
       <div style={{ fontSize: 11, color: C.midGray, marginTop: 12, lineHeight: 1.5, textAlign: "right" }}>
-        Powered by VoyageurAI Insights
+        Powered by AI Trip Planner Insights
       </div>
     </section>
   );

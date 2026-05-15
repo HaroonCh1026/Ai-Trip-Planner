@@ -61,7 +61,7 @@ const FooterBrand = () => (
           fontWeight: 700,
         }}
       >
-        Voyageur<span style={{ color: C.crimson }}>AI</span>
+       <span style={{ color: C.crimson }}>AI</span> Trip Planner
       </span>
     </div>
     <p
@@ -153,7 +153,7 @@ const FooterBottom = () => (
       }}
     >
       <div style={{ color: C.midGray, fontSize: 12 }}>
-        © 2025 VoyageurAI. All rights reserved. Built for IUB CS Project by Haroon Riaz.
+       © 2025 AI Trip Planner. All rights reserved. Built for IUB CS Project by Haroon Riaz.
       </div>
       <div style={{ display: "flex", gap: 16 }}>
         {["Privacy", "Terms", "Cookies"].map((item) => (

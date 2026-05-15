@@ -61,7 +61,7 @@ export default function WhyUsPanel({ trip }) {
       highlight: false,
     },
     {
-      label: "VoyageurAI",
+      label: "AI Trip Planner",
       sublabel: "Smart planning + verified prices",
       price: ourPrice,
       features: [
@@ -90,7 +90,7 @@ export default function WhyUsPanel({ trip }) {
         className="section-label"
         style={{ margin: 0, color: C.crimson, letterSpacing: "0.15em" }}
       >
-        Why VoyageurAI
+       Why AI Trip Planner
       </p>
       <h3 style={{ margin: "4px 0 18px", color: C.offWhite, fontSize: 20, fontWeight: 600 }}>
         How we compare to other booking options

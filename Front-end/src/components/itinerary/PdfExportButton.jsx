@@ -76,7 +76,7 @@ export default function PdfExportButton({ trip, isPro, targetId, onUpgradeClick 
       // Filename: "VoyageurAI-Hunza-Valley-2026-04-27.pdf"
       const safeDest = (trip?.destination || "trip").replace(/[^a-z0-9]+/gi, "-");
       const today = new Date().toISOString().slice(0, 10);
-      pdf.save(`VoyageurAI-${safeDest}-${today}.pdf`);
+      pdf.save(`AI-Tour-Planner-${safeDest}-${today}.pdf`);
     } catch (err) {
       console.error("PDF export failed:", err);
       setError("PDF export failed. Please try again.");

@@ -138,7 +138,7 @@ export default function Navbar({ onLogin, onSignup }) {
               color: C.offWhite,
             }}
           >
-            Voyageur<span style={{ color: C.crimson }}>AI</span>
+            <span style={{ color: C.crimson }}>AI</span> Trip Planner
           </span>
         </button>
 

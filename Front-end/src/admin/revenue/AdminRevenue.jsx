@@ -111,7 +111,7 @@ export default function AdminRevenue() {
         <p className="section-label">Operations</p>
         <h2 className="display-heading" style={{ fontSize: 28 }}>Revenue Analytics</h2>
         <p style={{ color: C.midGray, fontSize: 13, marginTop: 6, maxWidth: 720 }}>
-          Gross Booking Value (GMV) is the total flowing through the platform; Net Revenue is what VoyageurAI keeps from service fees.
+         Gross Booking Value (GMV) is the total flowing through the platform; Net Revenue is what AI Trip Planner keeps from service fees.
         </p>
       </div>
 
@@ -273,7 +273,7 @@ export default function AdminRevenue() {
           <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
             <div style={{ fontSize: 18 }}>💡</div>
             <div style={{ fontSize: 12, color: C.midGray, lineHeight: 1.5 }}>
-              <strong style={{ color: C.offWhite }}>Why two metrics?</strong> Gross Booking Value measures total demand on the platform — how much money users are spending overall. Net Revenue is what VoyageurAI actually keeps after vendor payouts (currently a {summary?.impliedTakeRatePercent || 8}% service fee). Investors and growth metrics look at GMV; sustainability and unit economics look at Net Revenue.
+              <strong style={{ color: C.offWhite }}>Why two metrics?</strong> Gross Booking Value measures total demand on the platform — how much money users are spending overall. Net Revenue is what AI Trip Planner actually keeps after vendor payouts (currently a {summary?.impliedTakeRatePercent || 8}% service fee). Investors and growth metrics look at GMV; sustainability and unit economics look at Net Revenue.
             </div>
           </div>
         </div>

@@ -64,7 +64,7 @@ export default function AdminSidebar({
                 fontWeight: 700,
               }}
             >
-              Voyageur<span style={{ color: C.crimson }}>AI</span>
+             <span style={{ color: C.crimson }}>AI</span> Trip Planner
             </div>
             <div
               style={{

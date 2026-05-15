@@ -1,6 +1,6 @@
 # VoyageurAI: Strategic Travel Architecture 🕋
 
-**VoyageurAI** is a premium, enterprise-grade AI Tour Planner localized for the Pakistani travel market. It leverages the power of **Google Gemini 2.5 Flash** to architect complex, logistically sound, and culturally rich travel itineraries in seconds.
+**VoyageurAI** is a premium, enterprise-grade AI Trip Planner localized for the Pakistani travel market. It leverages the power of **Google Gemini 2.5 Flash** to architect complex, logistically sound, and culturally rich travel itineraries in seconds.
 
 ![VoyageurAI Interface](https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1200&q=80)
 
@@ -28,7 +28,7 @@ You must have **Node.js** installed on your system.
 ### 2. Getting Started
 
 1. **Extract/Clone the Project**:
-   Copy the `Ai Tour Planner` directory to your local machine.
+   Copy the `AI Trip Planner` directory to your local machine.
 
 2. **Open Terminal**:
    Navigate into the project directory (where this README is located).
