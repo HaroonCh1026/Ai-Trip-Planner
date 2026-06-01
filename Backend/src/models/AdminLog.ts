@@ -15,6 +15,7 @@ export type AdminAction =
   | 'blog.delete'
   | 'ticket.status'
   | 'ticket.reply'
+  | 'booking.cancel'         // admin cancels a paid booking + triggers refund
   | 'admin.config.update';   // Day 5A — pricing controls edit
 
 export interface IAdminLog extends Document {

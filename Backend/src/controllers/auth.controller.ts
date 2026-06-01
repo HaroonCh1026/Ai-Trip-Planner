@@ -7,7 +7,7 @@ import { sendSuccess, sendError } from "../utils/response";
 import { AuthRequest } from "../types";
 import config from "../config/config";
 import crypto from "crypto";
-import { sendPasswordResetEmail, sendWelcomeEmail } from "../services/emailTemplates";
+import { sendPasswordResetEmail, sendWelcomeEmail, sendLoginNotificationEmail } from "../services/emailTemplates";
 import { getEffectiveConfig } from "../services/adminConfig.service";
 //                                                    ^^^^^^^^^^^^^^^^ Add this
 
@@ -158,6 +158,12 @@ export const login = async (
     }
 
     const token = signToken({ id: user._id.toString(), role: user.role });
+
+    // Fire-and-forget login notification. Best-effort — never blocks or fails
+    // the login if SMTP is down. (Fires on every sign-in; can be narrowed to
+    // new devices/IPs later if it feels noisy.)
+    sendLoginNotificationEmail({ name: user.name, email: user.email }).catch(() => {});
+
     sendSuccess(
       res,
       { token, user: buildUserPayload(user) },
@@ -184,6 +190,10 @@ export const socialLogin = async (
       return;
     }
     const token = signToken({ id: user._id.toString(), role: user.role });
+
+    // Fire-and-forget login notification (same as password login).
+    sendLoginNotificationEmail({ name: user.name, email: user.email }).catch(() => {});
+
     sendSuccess(
       res,
       { token, user: buildUserPayload(user) },

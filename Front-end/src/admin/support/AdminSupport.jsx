@@ -24,11 +24,13 @@ export default function AdminSupport({ tickets, setTickets, onReload }) {
   const [toast,        setToast]        = useState(null);
   const msgEndRef = useRef();
 
-  // Lock body scroll when the thread overlay is open on mobile.
-  // On desktop the panel is inline so this no-ops visually (overflow:hidden
-  // only matters when the panel covers the viewport via media query).
+  // Lock body scroll only on mobile, where the thread panel becomes a
+  // full-screen overlay (.vai-admin-thread-panel @media max-width:480px).
+  // On larger screens the panel is inline beside the list, so locking would
+  // trap the admin and stop them scrolling the (long) ticket list.
   useEffect(() => {
     if (!activeTicket) return;
+    if (!window.matchMedia("(max-width: 480px)").matches) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };

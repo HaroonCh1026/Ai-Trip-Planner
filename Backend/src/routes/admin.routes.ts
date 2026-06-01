@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getStats, getAllUsers, updateUserStatus, deleteUser, getAllBookings, getAdminLogs, getConfig, updateConfig } from '../controllers/admin.controller';
+import { getStats, getAllUsers, updateUserStatus, deleteUser, getAllBookings, cancelBooking, getAdminLogs, getConfig, updateConfig } from '../controllers/admin.controller';
 import { getRevenueSummary, getRevenueByDestination, getMonthlyRevenue } from '../controllers/revenue.controller';
 import { getMLAnalyticsMeta, getMLPredictions, getMLByRegion } from '../controllers/mlAnalytics.controller';
 import { getAllTickets, updateTicket, addTicketMessage } from '../controllers/support.controller';
@@ -17,6 +17,7 @@ router.patch('/users/:id/status',     validate(updateUserStatusSchema), updateUs
 router.delete('/users/:id',           deleteUser);
 // Round 3 (Admin #1): /admin/trips route removed — admin no longer sees user trips.
 router.get('/bookings',               getAllBookings);
+router.patch('/bookings/:bookingId/cancel', cancelBooking);
 
 // Audit log
 router.get('/logs',                   getAdminLogs);

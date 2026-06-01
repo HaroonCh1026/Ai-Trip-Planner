@@ -1,10 +1,38 @@
 import { useState, useMemo } from "react";
 import { C } from "../../styles/colors";
+import api from "../../api/client";
 
 export default function AdminBookings({ bookings = [], bookingMeta = {} }) { // eslint-disable-line no-unused-vars
   const [search, setSearch]   = useState("");
   const [filter, setFilter]   = useState("all");
   const [sortBy, setSortBy]   = useState("newest");
+
+  // Optimistic status overrides after an admin cancels a booking, so the row
+  // updates immediately without waiting for a full data refresh.
+  const [overrides, setOverrides] = useState({});
+  const [busyId, setBusyId]       = useState(null);
+  const [note, setNote]           = useState("");
+
+  // Cancel a paid booking: confirm, hit the admin endpoint (which emails the
+  // traveller and marks it Cancelled), then reflect it in the table.
+  const cancelBooking = async (b) => {
+    const st = overrides[b.id] || b.status;
+    if (st !== "Paid") return;
+    if (!window.confirm(
+      `Cancel booking ${b.id} for ${b.user}?\n\nThe traveller will be emailed that their trip is cancelled and a refund of ${b.amount} is being processed.`
+    )) return;
+    setBusyId(b.id);
+    setNote("");
+    try {
+      await api.patch(`/admin/bookings/${b.id}/cancel`);
+      setOverrides((o) => ({ ...o, [b.id]: "Cancelled" }));
+      setNote(`Booking ${b.id} cancelled. The traveller has been notified and a refund is being processed.`);
+    } catch (e) {
+      setNote(e?.response?.data?.message || "Could not cancel this booking. Please try again.");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const filtered = useMemo(() => {
     let list = [...bookings];
@@ -94,6 +122,15 @@ export default function AdminBookings({ bookings = [], bookingMeta = {} }) { // 
         </select>
       </div>
 
+      {note && (
+        <div style={{
+          marginBottom:16, padding:"10px 14px", borderRadius:6, fontSize:13,
+          background:"rgba(140,50,50,0.08)", border:"1px solid rgba(140,50,50,0.3)", color:C.offWhite,
+        }}>
+          {note}
+        </div>
+      )}
+
       {/* Table + mobile cards */}
       <div className="card vai-admin-table-wrap" style={{ overflow:"hidden" }}>
         {filtered.length === 0 ? (
@@ -104,7 +141,7 @@ export default function AdminBookings({ bookings = [], bookingMeta = {} }) { // 
             <table className="vai-admin-table" style={{ width:"100%", borderCollapse:"collapse" }}>
               <thead>
                 <tr style={{ background:"rgba(255,255,255,0.02)", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-                  {["BOOKING ID","USER","EMAIL","PLAN","TRIP","AMOUNT","DATE","STATUS"].map(h=>(
+                  {["BOOKING ID","USER","EMAIL","PLAN","TRIP","AMOUNT","DATE","STATUS","ACTIONS"].map(h=>(
                     <th key={h} style={{ padding:"14px 18px", fontSize:11, color:C.midGray, fontWeight:600, textAlign:"left", whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -127,7 +164,26 @@ export default function AdminBookings({ bookings = [], bookingMeta = {} }) { // 
                     <td style={{ padding:"13px 18px", fontSize:13 }}>{b.trip||"—"}</td>
                     <td style={{ padding:"13px 18px", fontSize:14, fontWeight:700, color:b.status==="Paid"?"#5CCC5C":C.offWhite }}>{b.amount||"—"}</td>
                     <td style={{ padding:"13px 18px", fontSize:12, color:C.midGray, whiteSpace:"nowrap" }}>{b.date||"—"}</td>
-                    <td style={{ padding:"13px 18px" }}>{statusPill(b.status)}</td>
+                    <td style={{ padding:"13px 18px" }}>{statusPill(overrides[b.id] || b.status)}</td>
+                    <td style={{ padding:"13px 18px", whiteSpace:"nowrap" }}>
+                      {(overrides[b.id] || b.status) === "Paid" ? (
+                        <button
+                          onClick={() => cancelBooking(b)}
+                          disabled={busyId === b.id}
+                          style={{
+                            padding:"6px 12px", fontSize:12, fontWeight:600,
+                            background:"transparent", border:`1px solid rgba(140,50,50,0.5)`,
+                            borderRadius:6, color:C.crimson,
+                            cursor: busyId === b.id ? "default" : "pointer",
+                            opacity: busyId === b.id ? 0.6 : 1,
+                          }}
+                        >
+                          {busyId === b.id ? "Cancelling…" : "Cancel & refund"}
+                        </button>
+                      ) : (
+                        <span style={{ fontSize:12, color:C.midGray }}>—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

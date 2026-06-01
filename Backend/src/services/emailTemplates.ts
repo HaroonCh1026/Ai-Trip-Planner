@@ -5,9 +5,9 @@ import config from '../config/config';
 // ─── Welcome Email ─────────────────────────────────────────────────────────
 export const welcomeEmailHtml = (name: string): string => {
   const body = `
-    <h2 style="margin:0 0 16px; font-size:24px;">Welcome to VoyageurAI, ${name}! 🎉</h2>
+    <h2 style="margin:0 0 16px; font-size:24px;">Welcome to Ai Trip Planner, ${name}! 🎉</h2>
     <p style="margin:0 0 16px; line-height:1.6;">We're thrilled to have you on board. Your AI-powered travel planning journey starts now.</p>
-    <p style="margin:0 0 12px; font-weight:600;">With VoyageurAI, you can:</p>
+    <p style="margin:0 0 12px; font-weight:600;">With Ai Trip Planner, you can:</p>
     <ul style="margin:0 0 20px; padding-left:20px; line-height:1.6;">
       <li>✨ Generate personalized itineraries</li>
       <li>🌍 Discover hidden gems and local favorites</li>
@@ -18,19 +18,84 @@ export const welcomeEmailHtml = (name: string): string => {
       <a href="${config.frontendUrl}/dashboard" style="display:inline-block; background:#8c3232; color:white; padding:12px 28px; border-radius:6px; text-decoration:none; font-weight:600;">Plan Your First Trip →</a>
     </div>
     <p style="margin:20px 0 0; line-height:1.6;">Questions? Reply to this email — we're here to help!</p>
-    <p style="margin:20px 0 0; line-height:1.6;">Safe travels,<br><strong>The VoyageurAI Team</strong></p>
+    <p style="margin:20px 0 0; line-height:1.6;">Safe travels,<br><strong>The Ai Trip Planner Team</strong></p>
   `;
   
-  return wrapEmailHtml({ bodyHtml: body, preheader: 'Welcome to VoyageurAI - Start planning your next adventure!' });
+  return wrapEmailHtml({ bodyHtml: body, preheader: 'Welcome to Ai Trip Planner - Start planning your next adventure!' });
 };
 
 export const sendWelcomeEmail = async (user: { name: string; email: string }): Promise<boolean> => {
   const html = welcomeEmailHtml(user.name);
-  const text = `Welcome to VoyageurAI, ${user.name}! Start planning your AI-powered travel adventures today.`;
+  const text = `Welcome to Ai Trip Planner, ${user.name}! Start planning your AI-powered travel adventures today.`;
   
   return sendEmail({
     to: user.email,
-    subject: 'Welcome to VoyageurAI',
+    subject: 'Welcome to Ai Trip Planner',
+    text,
+    html,
+  });
+};
+
+// ─── Pro Upgrade Confirmation ──────────────────────────────────────────────
+export const proUpgradeEmailHtml = (name: string): string => {
+  const body = `
+    <h2 style="margin:0 0 16px; font-size:24px;">You're Pro now, ${name}! ⭐</h2>
+    <p style="margin:0 0 16px; line-height:1.6;">Your upgrade to Ai Trip Planner Pro is confirmed. Thank you for the support.</p>
+    <p style="margin:0 0 12px; font-weight:600;">Your Pro plan unlocks:</p>
+    <ul style="margin:0 0 20px; padding-left:20px; line-height:1.6;">
+      <li>♾️ Unlimited AI itineraries</li>
+      <li>📄 PDF export and sharing</li>
+      <li>💎 Insider Tips for every destination</li>
+      <li>⚡ Priority generation</li>
+    </ul>
+    <div style="text-align:center; margin:28px 0 20px;">
+      <a href="${config.frontendUrl}/dashboard" style="display:inline-block; background:#8c3232; color:white; padding:12px 28px; border-radius:6px; text-decoration:none; font-weight:600;">Start exploring Pro →</a>
+    </div>
+    <p style="margin:20px 0 0; line-height:1.6;">Safe travels,<br><strong>The Ai Trip Planner Team</strong></p>
+  `;
+  return wrapEmailHtml({ bodyHtml: body, preheader: 'Your Ai Trip Planner Pro upgrade is confirmed.' });
+};
+
+export const sendProUpgradeEmail = async (user: { name: string; email: string }): Promise<boolean> => {
+  if (!user?.email) return false;
+  const name = user.name || 'Traveller';
+  const html = proUpgradeEmailHtml(name);
+  const text = `You're Pro now, ${name}! Your Ai Trip Planner Pro upgrade is confirmed — enjoy unlimited itineraries, PDF export, and Insider Tips.`;
+  return sendEmail({
+    to: user.email,
+    subject: 'Your Ai Trip Planner Pro upgrade is confirmed ⭐',
+    text,
+    html,
+  });
+};
+
+// ─── Login Notification ────────────────────────────────────────────────────
+export const loginNotificationEmailHtml = (name: string, whenText: string): string => {
+  const body = `
+    <h2 style="margin:0 0 16px; font-size:24px;">New sign-in to your account</h2>
+    <p style="margin:0 0 16px; line-height:1.6;">Hi ${name}, we noticed a sign-in to your Ai Trip Planner account on ${whenText} (PKT).</p>
+    <p style="margin:0 0 16px; line-height:1.6;">If this was you, there's nothing to do. If you don't recognise it, please reset your password right away.</p>
+    <div style="text-align:center; margin:28px 0 20px;">
+      <a href="${config.frontendUrl}/forgot-password" style="display:inline-block; background:#8c3232; color:white; padding:12px 28px; border-radius:6px; text-decoration:none; font-weight:600;">Secure my account →</a>
+    </div>
+    <p style="margin:20px 0 0; line-height:1.6;">— The Ai Trip Planner Team</p>
+  `;
+  return wrapEmailHtml({ bodyHtml: body, preheader: 'New sign-in to your Ai Trip Planner account.' });
+};
+
+export const sendLoginNotificationEmail = async (user: { name: string; email: string }): Promise<boolean> => {
+  if (!user?.email) return false;
+  const name = user.name || 'there';
+  const whenText = new Date().toLocaleString('en-PK', {
+    timeZone: 'Asia/Karachi',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+  const html = loginNotificationEmailHtml(name, whenText);
+  const text = `New sign-in to your Ai Trip Planner account on ${whenText} (PKT). If this wasn't you, reset your password.`;
+  return sendEmail({
+    to: user.email,
+    subject: 'New sign-in to your Ai Trip Planner account',
     text,
     html,
   });
@@ -173,7 +238,7 @@ export const sendAdminReplyUserEmail = async (ticket: {
   
   return sendEmail({
     to: ticket.email,
-    subject: 'VoyageurAI Support — Reply on your ticket',
+    subject: 'Ai Trip Planner Support — Reply on your ticket',
     text,
     html,
   });
@@ -194,16 +259,16 @@ export const passwordResetEmailHtml = (resetToken: string): string => {
     <p style="margin:10px 0 0; font-size:12px; color:#666;">For security, never share this link with anyone.</p>
   `;
   
-  return wrapEmailHtml({ bodyHtml: body, preheader: 'Reset your VoyageurAI password' });
+  return wrapEmailHtml({ bodyHtml: body, preheader: 'Reset your Ai Trip Planner password' });
 };
 
 export const sendPasswordResetEmail = async (email: string, resetToken: string): Promise<boolean> => {
   const html = passwordResetEmailHtml(resetToken);
-  const text = `Reset your VoyageurAI password by clicking this link: ${config.frontendUrl}/reset-password/${resetToken}. This link expires in 1 hour.`;
+  const text = `Reset your Ai Trip Planner password by clicking this link: ${config.frontendUrl}/reset-password/${resetToken}. This link expires in 1 hour.`;
   
   return sendEmail({
     to: email,
-    subject: 'VoyageurAI - Password Reset Request',
+    subject: 'Ai Trip Planner - Password Reset Request',
     text,
     html,
   });
@@ -240,7 +305,7 @@ export const bookingConfirmedEmailHtml = (data: {
   const body = `
     <h2 style="margin:0 0 16px; font-size:24px;">Your trip is booked, ${data.userName}! ✈️</h2>
     <p style="margin:0 0 20px; line-height:1.6;">
-      Thank you for booking with VoyageurAI. Your payment has been received and your itinerary is locked in.
+      Thank you for booking with Ai Trip Planner. Your payment has been received and your itinerary is locked in.
     </p>
 
     <div style="background:rgba(140,50,50,0.08); border:1px solid rgba(140,50,50,0.4); padding:18px 20px; border-radius:8px; margin:0 0 24px;">
@@ -276,7 +341,7 @@ export const bookingConfirmedEmailHtml = (data: {
     <ul style="margin:0 0 24px; padding-left:20px; line-height:1.7;">
       <li>Our travel team will reach out within <strong>24 hours</strong> to confirm logistics — pickup time, hotel check-in, and any final preferences.</li>
       <li>Closer to your start date, we'll send a day-by-day reminder with weather and local advisories for your route.</li>
-      <li>Need to make a change or have a question? Reply to this email or open a support ticket from your VoyageurAI dashboard.</li>
+      <li>Need to make a change or have a question? Reply to this email or open a support ticket from your Ai Trip Planner dashboard.</li>
     </ul>
 
     <div style="text-align:center; margin:28px 0 20px;">
@@ -284,10 +349,10 @@ export const bookingConfirmedEmailHtml = (data: {
     </div>
 
     <p style="margin:24px 0 0; line-height:1.6;">
-      Thank you for choosing VoyageurAI for your Pakistan adventure.
+      Thank you for choosing Ai Trip Planner for your Pakistan adventure.
     </p>
     <p style="margin:8px 0 0; line-height:1.6;">
-      Safe travels,<br><strong>The VoyageurAI Team</strong>
+      Safe travels,<br><strong>The Ai Trip Planner Team</strong>
     </p>
   `;
 
@@ -328,11 +393,53 @@ export const sendBookingConfirmedEmail = async (params: {
     (params.startDate ? `Departing: ${params.startDate}\n` : '') +
     `\nOur team will be in touch within 24 hours to coordinate logistics.\n\n` +
     `View your receipt: ${config.frontendUrl}/booking/${params.bookingId}/confirmed\n\n` +
-    `Thank you for choosing VoyageurAI.`;
+    `Thank you for choosing Ai Trip Planner.`;
 
   return sendEmail({
     to: params.userEmail,
     subject: `Booking confirmed — your trip to ${params.destination} is locked in (${params.bookingId})`,
+    text,
+    html,
+  });
+};
+// ─── Booking Cancellation / Refund ─────────────────────────────────────────
+export const bookingCancelledEmailHtml = (data: {
+  name: string;
+  bookingId: string;
+  destination: string;
+  amount: number;
+}): string => {
+  const body = `
+    <h2 style="margin:0 0 16px; font-size:24px;">Your booking has been cancelled</h2>
+    <p style="margin:0 0 16px; line-height:1.6;">Hi ${data.name}, your booking <strong>${data.bookingId}</strong>${data.destination ? ` for <strong>${data.destination}</strong>` : ''} has been cancelled as requested.</p>
+    <p style="margin:0 0 16px; line-height:1.6;">A refund of <strong>PKR ${Number(data.amount || 0).toLocaleString()}</strong> is being processed and will be returned to your original payment method. Refunds typically take 5 to 10 business days to appear.</p>
+    <p style="margin:0 0 16px; line-height:1.6;">If you have any questions, reply to this email or reach us through the support page.</p>
+    <p style="margin:20px 0 0; line-height:1.6;">— The Ai Trip Planner Team</p>
+  `;
+  return wrapEmailHtml({
+    bodyHtml: body,
+    preheader: 'Your Ai Trip Planner booking has been cancelled and a refund is being processed.',
+  });
+};
+
+export const sendBookingCancelledEmail = async (params: {
+  name: string;
+  email: string;
+  bookingId: string;
+  destination?: string;
+  amount?: number;
+}): Promise<boolean> => {
+  if (!params?.email) return false;
+  const html = bookingCancelledEmailHtml({
+    name: params.name || 'Traveller',
+    bookingId: params.bookingId,
+    destination: params.destination || '',
+    amount: Number(params.amount || 0),
+  });
+  const text = `Your booking ${params.bookingId} has been cancelled. A refund of PKR ${Number(params.amount || 0).toLocaleString()} is being processed and typically takes 5 to 10 business days.`;
+  return sendEmail({
+    to: params.email,
+    subject: `Your booking ${params.bookingId} has been cancelled`,
     text,
     html,
   });

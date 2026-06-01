@@ -6,6 +6,7 @@ import User from '../models/User';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types';
 import { getEffectiveConfig } from '../services/adminConfig.service';
+import { sendProUpgradeEmail } from '../services/emailTemplates';
 
 // ─── POST /api/bookings ────────────────────────────────────────────────────
 export const createBooking = async (
@@ -209,6 +210,13 @@ export const upgradeSubscription = async (
       { new: true }
     );
     if (!user) { sendError(res, 'User not found.', 404); return; }
+
+    // Best-effort Pro confirmation email (same as the Stripe webhook path).
+    if (user.email) {
+      sendProUpgradeEmail({ name: user.name || 'Traveller', email: user.email }).catch(
+        () => {}
+      );
+    }
 
     // Record subscription as a Paid booking (no tripId for subscription records)
     const fakeObjectId = new mongoose.Types.ObjectId();

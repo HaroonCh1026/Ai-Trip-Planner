@@ -6,6 +6,65 @@ import AdminLog from '../models/AdminLog';
 import { sendSuccess, sendError } from '../utils/response';
 import { AuthRequest } from '../types';
 import { logAdminAction } from '../services/adminLog.service';
+import { sendBookingCancelledEmail } from '../services/emailTemplates';
+
+// ─── Cancel a paid booking (admin) ─────────────────────────────────────────
+// Sets the booking to 'Cancelled' and notifies the traveller that a refund is
+// being processed. Matched on the human-readable bookingId (BK-90XX), which is
+// what the admin table already has. Email is best-effort and never blocks.
+export const cancelBooking = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { bookingId } = req.params;
+    const booking = await Booking.findOne({ bookingId });
+    if (!booking) {
+      sendError(res, 'Booking not found.', 404);
+      return;
+    }
+    if (booking.status === 'Cancelled') {
+      sendError(res, 'Booking is already cancelled.', 400);
+      return;
+    }
+
+    booking.status = 'Cancelled';
+    await booking.save();
+
+    // Audit trail + best-effort cancellation/refund email to the traveller.
+    logAdminAction({
+      action: 'booking.cancel',
+      performedBy: req.user!.id,
+      targetId: booking.bookingId,
+      targetType: 'bookings',
+      details: `Cancelled booking ${booking.bookingId}`,
+    }).catch(() => {});
+    try {
+      const user = await User.findById(booking.userId).select('name email');
+      const snap = (booking.tripSnapshot || {}) as Record<string, unknown>;
+      if (user?.email) {
+        await sendBookingCancelledEmail({
+          name: user.name || 'Traveller',
+          email: user.email,
+          bookingId: booking.bookingId || String(booking._id),
+          destination: String(snap['destination'] || ''),
+          amount: Number(booking.finalAmount || booking.amount || 0),
+        });
+      }
+    } catch (e) {
+      console.error('[admin] Booking cancellation email error (non-fatal):', e);
+    }
+
+    sendSuccess(
+      res,
+      { bookingId: booking.bookingId, status: booking.status },
+      'Booking cancelled. The traveller has been notified and a refund is being processed.'
+    );
+  } catch (err) {
+    next(err);
+  }
+};
 import {
   getRawAdminConfigDoc,
   getEffectiveConfig,

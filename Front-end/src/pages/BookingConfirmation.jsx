@@ -237,6 +237,34 @@ export default function BookingConfirmation() {
           >
             View itinerary
           </button>
+          {booking.status !== "Cancelled" && (
+            <button
+              onClick={() => {
+                const msg =
+                  `I would like to cancel my booking ${booking.bookingId}` +
+                  `${snap.destination ? ` for ${snap.destination}` : ""}` +
+                  ` (from ${snap.origin || "—"}, ${snap.dates || `${snap.days || "—"} days`}).` +
+                  ` I've changed my plans. Please cancel this trip and process my refund of` +
+                  ` PKR ${finalAmount.toLocaleString()}. Thank you.`;
+                navigate(
+                  `/support?tab=new&category=${encodeURIComponent("Cancellation & Refund")}` +
+                  `&prefill=${encodeURIComponent(msg)}`
+                );
+              }}
+              style={{
+                padding: "12px 18px",
+                background: "transparent",
+                border: "1px solid rgba(140,50,50,0.5)",
+                borderRadius: 6,
+                color: C.crimson,
+                cursor: "pointer",
+                fontSize: 14,
+                fontFamily: "'DM Sans', sans-serif",
+              }}
+            >
+              Cancel booking
+            </button>
+          )}
         </div>
 
         <p style={{ fontSize: 11, color: C.midGray, textAlign: "center", marginTop: 24, lineHeight: 1.5 }}>

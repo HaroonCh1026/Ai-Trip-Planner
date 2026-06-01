@@ -45,7 +45,7 @@ const adminConfigSchema = new Schema<IAdminConfig>(
     },
     tripServiceFeePercent: { type: Number, default: 8, min: 0, max: 50 },
     freeTripLimit:         { type: Number, default: 5, min: 0, max: 100 },
-    fuelPricePerLiterPKR:  { type: Number, default: 402, min: 0 },
+    fuelPricePerLiterPKR:  { type: Number, default: 382, min: 0 },
 
     // Mixed gives us flexible sparse maps without per-key schema definitions.
     // The service layer validates shape on write so we don't store garbage.

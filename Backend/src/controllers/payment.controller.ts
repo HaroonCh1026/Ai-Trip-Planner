@@ -13,7 +13,7 @@ import {
   isStripeEnabled,
 } from '../services/stripe.service';
 import { getEffectiveConfig } from '../services/adminConfig.service';
-import { sendBookingConfirmedEmail } from '../services/emailTemplates';
+import { sendBookingConfirmedEmail, sendProUpgradeEmail } from '../services/emailTemplates';
 
 const DEFAULT_TRIP_SERVICE_FEE_PERCENT = 8;
 
@@ -420,6 +420,17 @@ export const handleStripeWebhook = async (req: Request, res: Response): Promise<
           console.log(`[payment] ✅ SUCCESS: User ${userId} upgraded to Pro`);
           console.log(`[payment] User plan is now: ${updatedUser.plan}`);
           console.log(`[payment] Expires on: ${updatedUser.planExpires}`);
+
+          // Best-effort Pro confirmation email. Never fail the webhook over it
+          // (Stripe must always get a 200 so it doesn't retry the charge).
+          if (updatedUser.email) {
+            sendProUpgradeEmail({
+              name: updatedUser.name || 'Traveller',
+              email: updatedUser.email,
+            }).catch((e) =>
+              console.error('[payment] Pro upgrade email error (non-fatal):', e)
+            );
+          }
         } else {
           console.error(`[payment] User not found: ${userId}`);
         }

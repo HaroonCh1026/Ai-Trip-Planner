@@ -14,6 +14,7 @@ import WhyUsPanel from "../components/itinerary/WhyUsPanel";
 import BookTripButton from "../components/itinerary/BookTripButton";
 import InsiderTipsPanel from "../components/itinerary/InsiderTipsPanel";
 import ConfirmModal from "../components/ui/ConfirmModal";
+import { createCheckoutSession } from "../api/client";
 
 export default function ItineraryView({ trip, onBack }) {
   const navigate = useNavigate();
@@ -26,6 +27,26 @@ export default function ItineraryView({ trip, onBack }) {
   // the user away from the page abruptly.
   const [upgradeConfirm, setUpgradeConfirm] = useState(null);
 
+  // Start the Stripe Pro-upgrade checkout and send the user to Stripe's hosted
+  // page. This is the same flow ProfilePage uses (POST
+  // /payments/create-checkout-session → redirect to the returned url). The old
+  // code navigated to "/profile?tab=billing", which is not a real route (the
+  // profile lives inside the Dashboard as a tab), so it hit the 404 page.
+  const startProCheckout = async () => {
+    try {
+      const response = await createCheckoutSession();
+      if (response?.success && response?.data?.url) {
+        window.location.href = response.data.url; // Stripe hosted checkout
+        return;
+      }
+      // Couldn't start checkout (e.g. already Pro, or Stripe not configured).
+      // Fall back to the Dashboard's billing tab, which is a real route.
+      navigate("/dashboard?tab=profile");
+    } catch {
+      navigate("/dashboard?tab=profile");
+    }
+  };
+
   // Helper: build a confirm-modal payload for any Pro-gated feature.
   const promptUpgrade = (featureName) => {
     setUpgradeConfirm({
@@ -33,7 +54,7 @@ export default function ItineraryView({ trip, onBack }) {
       message: `Upgrade to Pro to unlock ${featureName.toLowerCase()} and all other Pro benefits including unlimited trips and exclusive Insider Tips.`,
       confirmLabel: "Upgrade Now",
       cancelLabel: "Maybe Later",
-      onConfirm: () => navigate("/profile?tab=billing"),
+      onConfirm: startProCheckout,
     });
   };
 

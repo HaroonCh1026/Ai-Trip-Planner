@@ -105,6 +105,7 @@ const buildPrompt = async (input: TripGenerationInput): Promise<string> => {
       distanceKm: distance * 2,
       groupSize,
       routeKey: `${input.origin}-${input.destination}`.toLowerCase(),
+      fuelPricePerLiterPKR: adminCfg.fuelPricePerLiterPKR,
     });
 
     // Vehicle-class style rules — these change the SHAPE of the itinerary,

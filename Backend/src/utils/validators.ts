@@ -141,7 +141,7 @@ export const createTicketSchema = Joi.object({
   name:     Joi.string().min(2).max(80).required().messages({ 'any.required': 'Name is required' }),
   email:    Joi.string().email().required().messages({ 'any.required': 'Email is required' }),
   category: Joi.string()
-    .valid('Technical', 'Billing', 'General Inquiry', 'Trip Issue')
+    .valid('Technical', 'Billing', 'General Inquiry', 'Cancellation & Refund', 'Trip Issue')
     .default('General Inquiry'),
   message:  Joi.string().min(10).max(2000).required().messages({
     'any.required': 'Message is required',

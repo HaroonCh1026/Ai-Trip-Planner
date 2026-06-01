@@ -12,18 +12,31 @@
 // since they're sent as `vehicleId` in the trip generation request.
 
 export const VEHICLES = [
+  // ── Labels lead with the recognisable car model (see backend mirror) ─────
+  // Single model per label on purpose: the label is sent to Gemini as the
+  // "VEHICLE LOCK" and matched for transport cost. ids are unchanged.
+  {
+    // Cheapest private car — added for budget travellers.
+    id: "hatchback_private",
+    label: "Suzuki Alto (with driver)",
+    icon: "🚗",
+    description: "Small economy car. Cheapest private option, best for 1-3.",
+    capacity: 3,
+    note: "Suzuki Alto, WagonR or Cultus. Driver included. Light luggage only.",
+    recommendedFor: ["solo", "couple"],
+  },
   {
     id: "sedan_private",
-    label: "Sedan (Private)",
-    icon: "🚗",
-    description: "Comfortable car with driver. Best for 1-3 people.",
+    label: "Toyota Corolla (with driver)",
+    icon: "🚘",
+    description: "Comfortable sedan with driver. Best for 1-3 people.",
     capacity: 3,
-    note: "Toyota Corolla or Honda City. Driver included.",
+    note: "Toyota Corolla, Honda City or Toyota Yaris. Driver included.",
     recommendedFor: ["solo", "couple", "business"],
   },
   {
     id: "sedan_shared",
-    label: "Sedan (Shared)",
+    label: "Shared Car (inDriver / Careem)",
     icon: "🚕",
     description: "Shared rideshare-style. Cheapest road option.",
     capacity: 1,
@@ -32,16 +45,16 @@ export const VEHICLES = [
   },
   {
     id: "suv_private",
-    label: "SUV (Private)",
+    label: "Toyota Fortuner (4x4)",
     icon: "🚙",
     description: "Spacious 4×4 — handles mountain routes.",
     capacity: 5,
-    note: "Toyota Fortuner or Honda BR-V. Required for some Northern routes.",
+    note: "Toyota Fortuner, Honda BR-V or KIA Sportage. Required for some Northern routes.",
     recommendedFor: ["family", "business"],
   },
   {
     id: "hiace_private",
-    label: "Hiace Van (Private)",
+    label: "Toyota Hiace (with driver)",
     icon: "🚐",
     description: "Spacious van with driver. Great for families.",
     capacity: 12,
@@ -50,7 +63,7 @@ export const VEHICLES = [
   },
   {
     id: "hiace_shared",
-    label: "Hiace Van (Shared)",
+    label: "Shared Hiace Van",
     icon: "🚌",
     description: "Shared van service — common intercity option.",
     capacity: 1,
@@ -59,7 +72,7 @@ export const VEHICLES = [
   },
   {
     id: "coaster_private",
-    label: "Coaster (Private)",
+    label: "Toyota Coaster (group)",
     icon: "🚍",
     description: "Mini-bus — best for groups of 8 or more.",
     capacity: 22,

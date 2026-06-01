@@ -4,12 +4,16 @@ import { C } from "../styles/colors";
 import { Icon } from "../components/Icon";
 import api from "../api/client";
 
-const CATEGORIES = ["General Inquiry", "Technical", "Billing", "Trip Issue"];
+const CATEGORIES = ["General Inquiry", "Technical", "Billing", "Cancellation & Refund", "Trip Issue"];
 
 export default function SupportPage({ user, onBack }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = searchParams.get("tab");
   const urlTicketId = searchParams.get("ticketId");
+  // Prefill support: arriving from "Cancel booking" on the confirmation page
+  // lands here with ?category=...&prefill=... so the form opens pre-filled.
+  const urlCategory = searchParams.get("category");
+  const urlPrefill = searchParams.get("prefill");
 
   // Derive tab from URL. Defaults: logged-in users → "tickets", guests → "new".
   const defaultTab = user ? "tickets" : "new";
@@ -32,6 +36,21 @@ export default function SupportPage({ user, onBack }) {
   const [submitted, setSubmitted]   = useState(false);
   const [error, setError]           = useState("");
   const msgEndRef = useRef();
+  const prefillApplied = useRef(false);
+
+  // Apply ?category / ?prefill once (from the Cancel-booking deep link), then
+  // strip those params from the URL but keep the user on the new-ticket tab.
+  useEffect(() => {
+    if (prefillApplied.current) return;
+    if (!urlCategory && !urlPrefill) return;
+    prefillApplied.current = true;
+    setForm((f) => ({
+      ...f,
+      category: urlCategory && CATEGORIES.includes(urlCategory) ? urlCategory : f.category,
+      message: urlPrefill || f.message,
+    }));
+    setSearchParams({ tab: "new" }, { replace: true });
+  }, [urlCategory, urlPrefill, setSearchParams]);
 
   // Load the user's tickets once when entering the "tickets" tab.
   // Previously re-ran on every [user, tab] change, which double-fetched.

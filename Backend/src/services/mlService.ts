@@ -189,6 +189,7 @@ export const buildMLInputFromTrip = (trip: {
   tripType?: string;
   accommodationType?: string;
   transportationType?: string;
+  vehicleId?: string;            // catalog id; mapped to a trained transport category
   region?: string;
   season?: string;
 }): MLPredictionInput | null => {
@@ -207,8 +208,8 @@ export const buildMLInputFromTrip = (trip: {
     traveler_gender: trip.travelerGender ?? 'Male',
     traveler_nationality: trip.travelerNationality ?? 'Pakistani',
     trip_type: trip.tripType ?? guessTripType(trip.preferences || ''),
-    accommodation_type: trip.accommodationType ?? guessAccommodationTier(Number(trip.budget) || 0, days),
-    transportation_type: trip.transportationType ?? 'Road (Hiace)',
+    accommodation_type: trip.accommodationType ?? guessAccommodationTier(Number(trip.budget) || 0, days, trip.groupSize ?? 2),
+    transportation_type: trip.transportationType ?? mapVehicleToMLTransport(trip.vehicleId),
     season: trip.season ?? guessSeason(trip.startDate || ''),
   };
   return input;
@@ -242,12 +243,35 @@ function guessTripType(preferences: string): string {
   return 'Leisure';
 }
 
-function guessAccommodationTier(budget: number, days: number): string {
-  // Rough thresholds based on dataset's median costs per accommodation tier.
+function guessAccommodationTier(budget: number, days: number, groupSize: number): string {
+  // Tier from per-PERSON-per-DAY spend, with thresholds that DEPEND ON PARTY
+  // SIZE. Solo travellers and couples don't split fixed costs (one room, one
+  // vehicle), so their per-head spend is naturally higher at the SAME tier:
+  // in the dataset a solo Mid trip runs ~PKR 18k/person/day, a couple ~11.4k,
+  // a group ~11.2k. Flat thresholds wrongly pushed a modest solo budget into
+  // Luxury and then told the user their budget was "low". The boundaries below
+  // are the midpoints between adjacent tier centres for each party bucket, so
+  // the chosen tier is realistic whether the user is solo, a couple, a family,
+  // or a group.
   if (!budget || !days) return 'Mid';
-  const perDay = budget / days;
-  if (perDay < 10000) return 'Budget';
-  if (perDay > 30000) return 'Luxury';
+  const grp = Math.max(1, groupSize || 1);
+  const perPersonPerDay = budget / (days * grp);
+
+  let lowMid: number;   // Budget / Mid boundary
+  let midLux: number;   // Mid / Luxury boundary
+  if (grp === 1) {
+    lowMid = 13500;
+    midLux = 27000;
+  } else if (grp === 2) {
+    lowMid = 9000;
+    midLux = 18000;
+  } else {
+    lowMid = 8500;
+    midLux = 17500;
+  }
+
+  if (perPersonPerDay < lowMid) return 'Budget';
+  if (perPersonPerDay > midLux) return 'Luxury';
   return 'Mid';
 }
 
@@ -261,4 +285,34 @@ function guessSeason(startDate: string): string {
   if (m >= 6 && m <= 8) return 'Summer';
   if (m >= 9 && m <= 11) return 'Autumn';
   return 'Winter';
+}
+
+// ── Vehicle to ML transport-category mapping ────────────────────────────────
+// The model was trained on five transport categories (see model_meta.json).
+// Previously the controller never passed the user's vehicle through, so every
+// prediction silently assumed 'Road (Hiace)' regardless of whether the user
+// picked a flight or a small car. That made the vehicle choice invisible to
+// the cost estimate. This maps each catalog vehicleId onto the closest
+// trained category. Unknown / unset falls back to the dataset's most common
+// road mode so behaviour is unchanged when no vehicle was chosen.
+export function mapVehicleToMLTransport(vehicleId?: string): string {
+  switch (vehicleId) {
+    case 'flight_economy':
+      return 'Flight';
+    case 'suv_private':
+      return 'Road (Car (SUV))';
+    case 'hatchback_private':
+    case 'sedan_private':
+    case 'sedan_shared':
+      return 'Road (Car (Small))';
+    case 'coaster_private':
+    case 'daewoo_business':
+    case 'daewoo_economy':
+      return 'Road (Coaster)';
+    case 'hiace_private':
+    case 'hiace_shared':
+      return 'Road (Hiace)';
+    default:
+      return 'Road (Hiace)';
+  }
 }

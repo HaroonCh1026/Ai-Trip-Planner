@@ -96,6 +96,16 @@ const mlPredictionSchema = new Schema(
     originalAiCostPKR: { type: Number, default: 0 },      // Gemini's pre-reconciliation total
     costReconciled: { type: Boolean, default: false },    // true = we scaled
     scaleFactor: { type: Number, default: 1 },            // multiplier applied (1 = no change)
+    // ── Budget honesty signal (read by CostComparisonPanel) ────────────────
+    // These must be declared here or Mongoose strips them on save and the
+    // frontend never sees them.
+    userBudgetPKR: { type: Number, default: 0 },          // what the user budgeted
+    overBudget: { type: Boolean, default: false },        // final cost above budget
+    budgetShortfallPKR: { type: Number, default: 0 },     // how much over (0 if not over)
+    underBudget: { type: Boolean, default: false },       // final cost below budget
+    budgetSurplusPKR: { type: Number, default: 0 },       // how much under (0 if not under)
+    overageCapPKR: { type: Number, default: 0 },          // max overage we allow (PKR 30k)
+    exceedsOverageCap: { type: Boolean, default: false }, // trip unaffordable even at leanest
   },
   { _id: false }
 );

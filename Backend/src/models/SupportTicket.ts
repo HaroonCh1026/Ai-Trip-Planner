@@ -12,7 +12,7 @@ export interface ISupportTicket extends Document {
   userId?: Types.ObjectId;
   name: string;
   email: string;
-  category: 'Technical' | 'Billing' | 'General Inquiry' | 'Trip Issue';
+  category: 'Technical' | 'Billing' | 'General Inquiry' | 'Cancellation & Refund' | 'Trip Issue';
   message: string;
   status: 'Open' | 'In Progress' | 'Closed';
   adminReply?: string;
@@ -35,7 +35,7 @@ const supportTicketSchema = new Schema<ISupportTicket>(
     email:    { type: String, required: true, trim: true, lowercase: true },
     category: {
       type: String,
-      enum: ['Technical', 'Billing', 'General Inquiry', 'Trip Issue'],
+      enum: ['Technical', 'Billing', 'General Inquiry', 'Cancellation & Refund', 'Trip Issue'],
       default: 'General Inquiry',
     },
     message:  { type: String, required: true, maxlength: 2000 },

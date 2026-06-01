@@ -17,6 +17,7 @@
  */
 
 export type VehicleCategory =
+  | 'hatchback_private'
   | 'sedan_private'
   | 'sedan_shared'
   | 'suv_private'
@@ -34,7 +35,9 @@ export interface VehicleOption {
   label: string;                    // shown to user
   description: string;              // 1-line UI hint
   capacity: number;                 // max passengers (excluding driver)
-  costPerKmPKR: number;              // total trip cost = costPerKmPKR × distance
+  costPerKmPKR: number;              // RENT-only rate (driver + vehicle) per km;
+                                     // fuel + tolls are added in computeTransportCost.
+                                     // For shared/public this is an all-in per-person fare.
   fuelEfficiencyKmPerLiter: number;  // 0 for flights/public transport
   isShared: boolean;                 // shared = per-person pricing already factored in
   isPublicTransport: boolean;        // bus/flight (no fuel calculation needed)
@@ -51,21 +54,46 @@ export interface VehicleOption {
 // admin override these without redeploying.
 
 export const VEHICLE_OPTIONS: VehicleOption[] = [
+  // ── Names lead with the car model people actually recognise ──────────────
+  // Labels now headline a single familiar model (Alto, Corolla, Fortuner...)
+  // instead of the generic category. We keep ONE model in the label, not a
+  // slash-list, on purpose: the label is fed verbatim into the Gemini
+  // "VEHICLE LOCK" prompt and is matched against activity names when we assign
+  // transport cost. A single clean token stays reliable on both; the alternate
+  // models live in `note` where they are informational only. The `id` strings
+  // are unchanged, so nothing downstream (ML buckets, admin overrides, saved
+  // trips) breaks.
+  {
+    // Cheapest private car. Added for budget travellers who don't need a
+    // full Corolla-class sedan — a small 1000cc hatchback with driver is a
+    // real money-saver on shorter routes. Maps to the same ML "small car"
+    // economics as the sedan; the lower costPerKmPKR is what makes it cheaper.
+    id: 'hatchback_private',
+    label: 'Suzuki Alto (with driver)',
+    description: 'Small economy car. Cheapest private option, best for 1-3 with light luggage.',
+    capacity: 3,
+    costPerKmPKR: 22,   // rent only (Alto/WagonR/Cultus + driver)
+    fuelEfficiencyKmPerLiter: 16,
+    isShared: false,
+    isPublicTransport: false,
+    recommendedFor: ['solo', 'couple'],
+    note: 'Examples: Suzuki Alto, WagonR, Cultus. Driver included. Light luggage only.',
+  },
   {
     id: 'sedan_private',
-    label: 'Sedan (Private)',
-    description: 'Comfortable car with driver. Best for 1-3 people.',
+    label: 'Toyota Corolla (with driver)',
+    description: 'Comfortable sedan with driver. Best for 1-3 people.',
     capacity: 3,
-    costPerKmPKR: 25,
+    costPerKmPKR: 28,   // rent only (Corolla/City/Yaris + driver)
     fuelEfficiencyKmPerLiter: 12,
     isShared: false,
     isPublicTransport: false,
     recommendedFor: ['solo', 'couple', 'business'],
-    note: 'Examples: Toyota Corolla, Honda City. Driver included.',
+    note: 'Examples: Toyota Corolla, Honda City, Toyota Yaris. Driver included.',
   },
   {
     id: 'sedan_shared',
-    label: 'Sedan (Shared)',
+    label: 'Shared Car (inDriver / Careem)',
     description: 'Shared rideshare-style sedan. Cheapest road option.',
     capacity: 1,
     costPerKmPKR: 8,
@@ -77,22 +105,22 @@ export const VEHICLE_OPTIONS: VehicleOption[] = [
   },
   {
     id: 'suv_private',
-    label: 'SUV (Private)',
+    label: 'Toyota Fortuner (4x4)',
     description: 'Spacious 4×4 — good for mountain routes & rough roads.',
     capacity: 5,
-    costPerKmPKR: 45,
+    costPerKmPKR: 45,   // rent only (Fortuner/BR-V/Sportage + driver)
     fuelEfficiencyKmPerLiter: 9,
     isShared: false,
     isPublicTransport: false,
     recommendedFor: ['family', 'business'],
-    note: 'Examples: Toyota Fortuner, Honda BR-V. Required for some Northern routes.',
+    note: 'Examples: Toyota Fortuner, Honda BR-V, KIA Sportage. Required for some Northern routes.',
   },
   {
     id: 'hiace_private',
-    label: 'Hiace (Private)',
+    label: 'Toyota Hiace (with driver)',
     description: 'Spacious van with driver. Great for families & small groups.',
     capacity: 12,
-    costPerKmPKR: 60,
+    costPerKmPKR: 60,   // rent only (Hiace Grand Cabin + driver)
     fuelEfficiencyKmPerLiter: 7,
     isShared: false,
     isPublicTransport: false,
@@ -101,7 +129,7 @@ export const VEHICLE_OPTIONS: VehicleOption[] = [
   },
   {
     id: 'hiace_shared',
-    label: 'Hiace (Shared)',
+    label: 'Shared Hiace Van',
     description: 'Shared van service — one of the most common intercity options.',
     capacity: 1,
     costPerKmPKR: 12,
@@ -113,10 +141,10 @@ export const VEHICLE_OPTIONS: VehicleOption[] = [
   },
   {
     id: 'coaster_private',
-    label: 'Coaster (Private)',
+    label: 'Toyota Coaster (group)',
     description: 'Mini-bus — best for groups of 8 or more.',
     capacity: 22,
-    costPerKmPKR: 120,
+    costPerKmPKR: 90,   // rent only (Coaster + driver)
     fuelEfficiencyKmPerLiter: 5,
     isShared: false,
     isPublicTransport: false,
@@ -214,8 +242,9 @@ export function computeTransportCost(args: {
   distanceKm: number;
   groupSize: number;
   routeKey?: string;          // e.g. "lahore-skardu"
+  fuelPricePerLiterPKR?: number;  // live OGRA price; falls back to a current default
 }): number {
-  const { vehicle, distanceKm, groupSize, routeKey } = args;
+  const { vehicle, distanceKm, groupSize, routeKey, fuelPricePerLiterPKR } = args;
 
   // Fixed flight route price wins if available
   if (vehicle.fixedRoutePricesPKR && routeKey) {
@@ -230,10 +259,31 @@ export function computeTransportCost(args: {
     }
   }
 
-  const baseCost = vehicle.costPerKmPKR * distanceKm;
-  // Round-trip vs one-way: the AI generation flow assumes total trip
-  // distance which already accounts for return leg, so we don't ×2 here.
-  return vehicle.isShared ? baseCost * groupSize : baseCost;
+  // Shared / public transport (bus, shared car, flight fallback): costPerKmPKR
+  // is an all-in PER-PERSON fare — fuel is already baked into the ticket — so
+  // we just multiply by the number of travellers.
+  if (vehicle.isShared || vehicle.isPublicTransport) {
+    return Math.round(vehicle.costPerKmPKR * distanceKm * Math.max(1, groupSize));
+  }
+
+  // Private vehicle: real intercity cost = rent (driver + vehicle) + fuel + tolls.
+  // This mirrors the formula the ML dataset was built on, so the deterministic
+  // line-item cost and the ML prediction stay consistent. Fuel is computed from
+  // the LIVE admin fuel price and the vehicle's efficiency, so the estimate
+  // tracks current pump prices instead of being frozen in a single per-km rate.
+  const FUEL_FALLBACK_PKR = 382;   // current OGRA petrol; admin price overrides
+  const TOLL_PER_KM = 0.5;         // motorway tolls, matches dataset assumption
+  const fuelPrice =
+    fuelPricePerLiterPKR && fuelPricePerLiterPKR > 0 ? fuelPricePerLiterPKR : FUEL_FALLBACK_PKR;
+
+  const rentCost = vehicle.costPerKmPKR * distanceKm;
+  const fuelCost =
+    vehicle.fuelEfficiencyKmPerLiter > 0
+      ? (distanceKm / vehicle.fuelEfficiencyKmPerLiter) * fuelPrice
+      : 0;
+  const tollCost = distanceKm * TOLL_PER_KM;
+
+  return Math.round(rentCost + fuelCost + tollCost);
 }
 
 /**

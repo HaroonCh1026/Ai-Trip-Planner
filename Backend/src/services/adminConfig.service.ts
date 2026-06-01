@@ -32,7 +32,11 @@ export interface EffectiveConfig {
 const DEFAULTS: EffectiveConfig = {
   tripServiceFeePercent: 8,
   freeTripLimit: 5,
-  fuelPricePerLiterPKR: 402,
+  // OGRA petrol rate as of 30 May 2026 (PKR 381.78, rounded to 382). Fuel is
+  // revised every fortnight (15th + last day of month), so this is a seed
+  // only: the admin keeps it current from the pricing panel and that value
+  // overrides this default.
+  fuelPricePerLiterPKR: 382,
   vehicleOverridesPKR: {},
   flightRouteOverridesPKR: {},
 };

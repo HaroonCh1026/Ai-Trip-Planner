@@ -77,6 +77,15 @@ export const generateItinerary = async (
       1,
       Number((input as TripGenerationInput).groupSize) || 1
     );
+
+    // Fetch the real road distance up front so the ML prediction reflects the
+    // actual route instead of the old hard-coded 500 km default. Best-effort:
+    // if routing is unavailable we pass undefined and buildMLInputFromTrip
+    // falls back to its own default. We reuse this same lookup later for the
+    // transport-cost redistribution, so this stays a single network call.
+    const routeInfo = await getRoute(input.origin, input.destination).catch(() => null);
+    const routeDistanceKm = routeInfo?.kmRoad;
+
     const mlInput = buildMLInputFromTrip({
       origin: input.origin,
       destination: input.destination,
@@ -85,6 +94,8 @@ export const generateItinerary = async (
       startDate: input.startDate,
       preferences: input.preferences,
       groupSize: groupSizeNum,
+      distanceKm: routeDistanceKm,                         // real route distance (was defaulting to 500)
+      vehicleId: (input as TripGenerationInput).vehicleId, // so transport mode affects the prediction
     });
 
     let preflightPrediction: Awaited<ReturnType<typeof predictTripCost>> = null;
@@ -97,82 +108,43 @@ export const generateItinerary = async (
       }
     }
 
-    // ─── Group-size fix Layer B: defensive ML scaling ─────────────────────
-    // The synthetic training dataset has weak group-size signal (groupSize=1
-    // and 2 average ~PKR 72k–76k; 3 and 4 jump to ~PKR 140k; 5 and 6 sit
-    // around ~PKR 200k — stair-stepped, not linear). The model picks up the
-    // direction but undershoots magnitude.
-    //
-    // Real-world per-additional-person cost is roughly +60–80% of solo (each
-    // extra person needs their own meals, tickets, partial hotel share). We
-    // enforce a floor multiplier so a family of 4 doesn't get a couple's
-    // ML target. The multiplier is applied to the SOLO-anchor (predicted /
-    // datasetGroupSize) rather than the predicted total directly, so we
-    // don't double-scale.
-    //
-    // Future Work: retrain on real booking data with linear scaling. Until
-    // then, this guards against unrealistic family-trip targets reaching
-    // Gemini's prompt.
-    if (preflightPrediction) {
-      // The dataset's de-facto solo cost (from ML training); we anchor on
-      // groupSize=1 because that's the cleanest baseline. We extract it by
-      // back-computing from the predicted value at whatever group size we
-      // sent. This is rough but acceptable — the band-aid is intentional.
-      const minMultiplier =
-        groupSizeNum === 1 ? 1.0
-        : groupSizeNum === 2 ? 1.5
-        : groupSizeNum === 3 ? 2.2
-        : groupSizeNum === 4 ? 2.8
-        : groupSizeNum === 5 ? 3.4
-        : 4.0; // 6+ people
+    // ─── Group-size floor removed (was: 'Layer B defensive ML scaling') ───
+    // The old code multiplied the prediction up by a fixed per-group factor
+    // (1.5x for a couple, 2.8x for a family of 4) on the theory that the
+    // dataset had weak group-size signal. In practice the model scales for
+    // group size on its own, and stacking this floor on top of a correctly
+    // chosen accommodation tier was a major cause of the inflated totals
+    // (a Mid couple trip being pushed past PKR 300k). With the tier fix in
+    // mlService.guessAccommodationTier, the raw prediction is already
+    // realistic, so we trust it directly. No artificial scaling.
 
-      // Reverse-engineer the solo anchor from the dataset's stair-step.
-      // Empirically: dataset means at sizes 1..6 are roughly 72k, 76k, 139k,
-      // 142k, 227k, 205k. We use a piecewise inverse to recover what the
-      // model "thinks" a solo trip in this region+season would cost, then
-      // re-scale by minMultiplier.
-      const datasetMultiplier =
-        groupSizeNum === 1 ? 1.0
-        : groupSizeNum === 2 ? 1.05
-        : groupSizeNum === 3 ? 1.93
-        : groupSizeNum === 4 ? 1.97
-        : groupSizeNum === 5 ? 3.15
-        : 2.85; // 6+ — use the 6 mean
-
-      const soloAnchor = preflightPrediction.predicted_cost_pkr / datasetMultiplier;
-      const flooredPredicted = soloAnchor * minMultiplier;
-
-      // Only scale UP, never down. If the model already predicted higher
-      // than our floor (unlikely but possible for premium destinations),
-      // trust the model's signal.
-      if (flooredPredicted > preflightPrediction.predicted_cost_pkr) {
-        const oldPredicted = preflightPrediction.predicted_cost_pkr;
-        const ratio = flooredPredicted / oldPredicted;
-        preflightPrediction = {
-          ...preflightPrediction,
-          predicted_cost_pkr: Math.round(flooredPredicted),
-          low_pkr: Math.round(preflightPrediction.low_pkr * ratio),
-          high_pkr: Math.round(preflightPrediction.high_pkr * ratio),
-        };
-        console.info(
-          `[ai.controller] Group-size floor applied for groupSize=${groupSizeNum}: ` +
-          `predicted PKR ${oldPredicted.toLocaleString()} → ` +
-          `PKR ${Math.round(flooredPredicted).toLocaleString()} ` +
-          `(min mult ${minMultiplier}x of solo anchor)`
-        );
-      }
-    }
+    // ─── Budget overage cap (max PKR 30k over budget) ─────────────────────
+    // The user is fine going up to PKR 30k over budget for a realistic plan,
+    // but not more. We honour that by capping the cost target handed to Gemini
+    // at (budget + 30k), so it never plans a trip beyond that ceiling. Because
+    // the accommodation tier is already chosen from the budget, the realistic
+    // cost normally sits near the budget and this cap rarely bites; it is the
+    // guard rail for the cases where it would.
+    const OVERAGE_CAP_PKR = 30000;
+    const userBudgetPre = Number(input.budget) || 0;
+    const maxSpendPKR = userBudgetPre > 0 ? userBudgetPre + OVERAGE_CAP_PKR : 0;
 
     // Inject the ML range into the input so gemini.service.ts can fold it
     // into the prompt. We put it on the input object rather than threading
     // a new parameter through the call signature — minimal API surface change.
+    // The high/predicted values are capped at maxSpendPKR so Gemini's line
+    // items naturally sum to something within the user's overage allowance.
     if (preflightPrediction) {
+      const cap = maxSpendPKR > 0 ? maxSpendPKR : Number.MAX_SAFE_INTEGER;
+      const cappedHigh = Math.min(preflightPrediction.high_pkr, cap);
+      const cappedPredicted = Math.min(preflightPrediction.predicted_cost_pkr, cap);
+      const cappedLow = Math.min(preflightPrediction.low_pkr, cappedHigh);
       (input as TripGenerationInput & {
         mlCostHint?: { low: number; high: number; predicted: number };
       }).mlCostHint = {
-        low: preflightPrediction.low_pkr,
-        high: preflightPrediction.high_pkr,
-        predicted: preflightPrediction.predicted_cost_pkr,
+        low: cappedLow,
+        high: cappedHigh,
+        predicted: cappedPredicted,
       };
     }
 
@@ -239,13 +211,14 @@ export const generateItinerary = async (
             adminCfg.vehicleOverridesPKR || {},
             adminCfg.flightRouteOverridesPKR || {}
           );
-          const route = await getRoute(input.origin, input.destination).catch(() => null);
-          const distance = route?.kmRoad ?? 500;
+          // Reuse the route fetched up front for the ML input (one call, not two).
+          const distance = routeInfo?.kmRoad ?? 500;
           const totalTransportCost = computeTransportCost({
             vehicle,
             distanceKm: distance * 2, // round-trip
             groupSize: groupSizeNum,
             routeKey: `${input.origin}-${input.destination}`.toLowerCase(),
+            fuelPricePerLiterPKR: adminCfg.fuelPricePerLiterPKR,
           });
 
           // Step 1: collect every transit leg that mentions the vehicle label.
@@ -317,6 +290,13 @@ export const generateItinerary = async (
           type TransitLeg = { day: any; activity: any; hours: number };
           const transitLegs: TransitLeg[] = [];
 
+          // Standalone "round-trip transport cost" lump lines to remove, so
+          // transport is counted once (on the per-leg shares below) and never
+          // twice. Gemini tends to emit a lump line AND per-leg vehicle legs.
+          const lumpLines: { day: any; activity: any }[] = [];
+          const LUMP_TRANSPORT_RE =
+            /round[\s-]?trip|transport(ation)?\s+cost|total\s+transport/;
+
           // Pre-compute which days already have a "Local 4x4 Jeep Rental" line.
           // On those days, the user is doing intra-destination off-road driving
           // in a rented jeep, NOT inter-city transport in their main vehicle.
@@ -348,20 +328,31 @@ export const generateItinerary = async (
             for (const activity of day.activities) {
               if (!activity || typeof activity.name !== 'string') continue;
 
-              // Only redistribute INTO legs Gemini left at zero. If Gemini
-              // already put a sensible cost on a leg, respect it — overwriting
-              // would risk double-counting against the headline.
-              const currentCost = Number(activity.cost ?? 0);
-              if (currentCost > 0) continue;
+              const nameLower = activity.name.toLowerCase();
+
+              // Detect Gemini's standalone "round-trip transport cost" lump
+              // line. Gemini is told to put the whole transport figure on one
+              // line AND to name each driving leg with the vehicle, so it does
+              // both, double-counting transport. We take ownership: record the
+              // lump for removal and let the per-leg distribution below be the
+              // single source of transport truth.
+              if (LUMP_TRANSPORT_RE.test(nameLower)) {
+                lumpLines.push({ day, activity });
+                continue;
+              }
 
               // Skip explicitly non-transit activity types (meals, rest stops,
               // arrivals, hotel check-ins).
               const typeLower = String(activity.type || '').toLowerCase();
               if (NON_TRANSIT_TYPES.has(typeLower)) continue;
 
-              const nameLower = activity.name.toLowerCase();
               const hours = parseDurationHours(String(activity.duration || ''));
               if (hours <= 0) continue; // can't weight a 0-duration leg
+
+              // NOTE: unlike before, we do NOT skip legs that already carry a
+              // cost. Gemini's per-leg transport numbers are unreliable (it
+              // lowballs them after dumping the real figure in the lump line),
+              // so we OWN every matched transit leg and overwrite it below.
 
               // Primary match: vehicle label or id appears in the activity name.
               // (Reliable when Gemini follows the prompt's naming guidance.)
@@ -420,6 +411,62 @@ export const generateItinerary = async (
                 `transit leg(s), totaling ${totalHours.toFixed(1)} hours.`
               );
             }
+          }
+
+          // ── Take ownership: remove lump lines, then rebuild totals ──────────
+          // Remove every standalone lump transport line we recorded, so the
+          // per-leg shares above are the only place transport is counted.
+          for (const { day, activity } of lumpLines) {
+            if (Array.isArray(day.activities)) {
+              const idx = day.activities.indexOf(activity);
+              if (idx >= 0) day.activities.splice(idx, 1);
+            }
+          }
+          // Fallback: if there were no transit legs to carry the cost but a
+          // lump existed, keep ONE corrected line rather than losing transport.
+          if (transitLegs.length === 0 && lumpLines.length > 0 && totalTransportCost > 0) {
+            const firstDay = result.days[0];
+            if (firstDay && Array.isArray(firstDay.activities)) {
+              firstDay.activities.unshift({
+                time: '08:00',
+                name: `Round-trip transport (${vehicle.label})`,
+                location: `${input.origin} - ${input.destination}`,
+                duration: 'N/A',
+                cost: totalTransportCost,
+                type: 'transport',
+              });
+            }
+          }
+
+          // Recompute each day's dailyCost from its visible line items (all
+          // activity costs + the hotel) and the headline from the day totals.
+          // This makes the figures bottom-up consistent and removes the
+          // transport double-count that was baked into Gemini's headline.
+          if (Array.isArray(result.days) && result.days.length > 0) {
+            let newHeadline = 0;
+            for (const day of result.days) {
+              let daySum = 0;
+              if (Array.isArray(day.activities)) {
+                for (const a of day.activities) {
+                  const v = Number((a as any)?.cost ?? (a as any)?.price ?? 0);
+                  if (Number.isFinite(v) && v > 0) daySum += v;
+                }
+              }
+              if (day?.hotel) {
+                const hotel = day.hotel as any;
+                let h = Number(hotel.price ?? hotel.pricePerNight ?? 0);
+                if (!Number.isFinite(h) || h === 0) {
+                  h = Number(
+                    String(hotel.price ?? hotel.pricePerNight ?? '').replace(/[^\d]/g, '')
+                  );
+                }
+                if (Number.isFinite(h) && h > 0) daySum += h;
+              }
+              (day as any).dailyCost = daySum;
+              newHeadline += daySum;
+            }
+            (result as any).totalEstimatedCost = newHeadline;
+            (result as any).totalCost = newHeadline;
           }
         }
       }
@@ -608,60 +655,99 @@ export const generateItinerary = async (
       let withinRange =
         aiCost >= prediction.low_pkr && aiCost <= prediction.high_pkr;
 
-      // ─── Round 2 (Option B): gentle total-only fallback ──────────────────
-      // The new architecture (passing the ML range as a Gemini prompt
-      // constraint) means Gemini SHOULD produce realistic line items
-      // summing to the target range. So in the common case `withinRange`
-      // is already true here and we just attach metadata.
-      //
-      // For the rare case Gemini ignores the constraint, we apply a
-      // total-only adjustment — we no longer scale individual line items
-      // because that produced unrealistic numbers like "PKR 27,322 day
-      // trip" in the user's screenshot. The line items remain whatever
-      // Gemini chose; only the headline total gets aligned to the ML
-      // midpoint, and we surface this in the cost panel.
+      // ─── Budget reconciliation: realistic-first, honest, and consistent ───
+      // Rules:
+      //   - The plan's cost is the REAL bottom-up sum of its line items.
+      //   - Up to OVERAGE_CAP over budget is fine; we never pad a cheaper plan
+      //     up, and never squeeze a costlier one down to a fake number.
+      //   - If the real cost is MORE than OVERAGE_CAP over budget, the trip is
+      //     genuinely unaffordable as specified: keep an honest figure (capped
+      //     at the market ceiling) and let the itinerary say so and suggest
+      //     changes, rather than pretend it fits.
+      //   - Whenever we move the headline we scale the per-day totals AND every
+      //     visible line item by the same factor, so the breakdown always adds
+      //     up. (The old bug scaled day totals only, leaving line items intact,
+      //     so a day header read 60k while its activities summed to 137k.)
+      const userBudget = Number(input.budget) || 0;
+      const realisticFloor = prediction.low_pkr;
+      const realisticCeil = prediction.high_pkr;
+      const maxSpend = userBudget > 0 ? userBudget + OVERAGE_CAP_PKR : realisticCeil;
       let costReconciled = false;
       let scaleFactor = 1;
-      if (!withinRange && aiCost > 0 && predicted > 0) {
-        const target = (prediction.low_pkr + prediction.high_pkr) / 2;
-        scaleFactor = target / aiCost;
-        costReconciled = true;
 
-        const reconciled = Math.round(target);
+      const applyHeadline = (reconciled: number) => {
+        const factor = aiCost > 0 ? reconciled / aiCost : 1;
+        scaleFactor = factor;
         (result as any).totalEstimatedCost = reconciled;
         (result as any).totalCost = reconciled;
-        aiCost = reconciled;
-        withinRange = true; // by construction
-
-        // NOTE: deliberately NOT scaling per-day cost / activity prices /
-        // hotel prices. Those were produced by Gemini under the prompt
-        // constraint (or, if that failed, are at least Gemini's natural
-        // estimates which look human-readable). Touching them produced
-        // weird numbers like "PKR 27,322 lunch" in the previous round.
-
-        // Round 2: but DO re-rebalance daily costs so they sum to the new
-        // total. We rescale dailyCost values by the same factor — this
-        // doesn't touch individual activity/hotel prices (which stay
-        // realistic) but keeps the per-day breakdown aligned with the
-        // new headline.
         try {
           const days = Array.isArray(result?.days) ? result.days : [];
-          if (days.length > 0) {
-            let runningTotal = 0;
-            for (let i = 0; i < days.length; i++) {
-              const isLast = i === days.length - 1;
-              const current = Number((days[i] as any).dailyCost) || 0;
-              const adjusted = isLast
-                ? reconciled - runningTotal
-                : Math.round(current * scaleFactor);
-              (days[i] as any).dailyCost = adjusted;
-              runningTotal += adjusted;
+          let runningTotal = 0;
+          for (let i = 0; i < days.length; i++) {
+            const day: any = days[i];
+            const isLast = i === days.length - 1;
+            const currentDaily = Number(day.dailyCost) || 0;
+            const newDaily = isLast
+              ? reconciled - runningTotal
+              : Math.round(currentDaily * factor);
+            // Scale visible line items by the SAME factor so the per-day
+            // breakdown keeps matching the day total.
+            if (Array.isArray(day.activities)) {
+              for (const a of day.activities) {
+                if (typeof a.cost === 'number' && a.cost > 0) a.cost = Math.round(a.cost * factor);
+                if (typeof a.price === 'number' && a.price > 0) a.price = Math.round(a.price * factor);
+              }
             }
+            if (day.hotel && typeof day.hotel === 'object') {
+              if (typeof day.hotel.price === 'number' && day.hotel.price > 0) {
+                day.hotel.price = Math.round(day.hotel.price * factor);
+              }
+              if (typeof day.hotel.pricePerNight === 'number' && day.hotel.pricePerNight > 0) {
+                day.hotel.pricePerNight = Math.round(day.hotel.pricePerNight * factor);
+              }
+              if (typeof day.hotel.price === 'string') {
+                const num = Number(String(day.hotel.price).replace(/[^\d]/g, ''));
+                if (Number.isFinite(num) && num > 0) {
+                  day.hotel.price = `PKR ${Math.round(num * factor).toLocaleString()}/night`;
+                }
+              }
+            }
+            day.dailyCost = newDaily;
+            runningTotal += newDaily;
           }
         } catch {
-          // Defensive: leave unchanged if anything goes wrong
+          // Defensive: leave values unchanged on any error.
+        }
+        aiCost = reconciled;
+        costReconciled = true;
+      };
+
+      // Affordability is judged on the REAL (pre-clamp) cost.
+      const realCost = aiCost;
+      const exceedsOverageCap =
+        userBudget > 0 && realCost > userBudget + OVERAGE_CAP_PKR;
+
+      if (realCost > 0) {
+        if (exceedsOverageCap) {
+          // Unaffordable as specified: keep an honest figure, only capping at
+          // the market ceiling so we never claim more than such a trip costs.
+          if (realCost > realisticCeil) applyHeadline(Math.round(realisticCeil));
+        } else {
+          // Affordable within the overage allowance: bound into the honest
+          // band; never pad a cheap plan up.
+          const upperBound = Math.max(realisticFloor, Math.min(realisticCeil, maxSpend));
+          if (realCost < realisticFloor) applyHeadline(Math.round(realisticFloor));
+          else if (realCost > upperBound) applyHeadline(Math.round(upperBound));
         }
       }
+      withinRange = aiCost >= realisticFloor && aiCost <= realisticCeil;
+
+      // Honest budget comparison off the FINAL headline.
+      const overBudget = userBudget > 0 && aiCost > userBudget;
+      const budgetShortfallPKR = overBudget ? Math.round(aiCost - userBudget) : 0;
+      const underBudget = userBudget > 0 && aiCost < userBudget;
+      const budgetSurplusPKR = underBudget ? Math.round(userBudget - aiCost) : 0;
+
 
       // Recompute delta against the (potentially-aligned) total
       const delta = predicted > 0
@@ -684,10 +770,29 @@ export const generateItinerary = async (
         originalAiCostPKR: originalAiCost,
         costReconciled,
         scaleFactor: Math.round(scaleFactor * 1000) / 1000,
+        // Budget honesty signal. The frontend uses these to explain the
+        // budget situation plainly in the itinerary: over budget (by how much),
+        // under budget (savings), or right on target. budgetShortfallPKR is
+        // capped at OVERAGE_CAP_PKR in normal cases; exceedsOverageCap flags
+        // the rare trip that is unaffordable as specified even at its leanest.
+        userBudgetPKR: userBudget,
+        overBudget,
+        budgetShortfallPKR,
+        underBudget,
+        budgetSurplusPKR,
+        overageCapPKR: OVERAGE_CAP_PKR,
+        exceedsOverageCap,
       } as typeof enriched.mlPrediction & {
         originalAiCostPKR: number;
         costReconciled: boolean;
         scaleFactor: number;
+        userBudgetPKR: number;
+        overBudget: boolean;
+        budgetShortfallPKR: number;
+        underBudget: boolean;
+        budgetSurplusPKR: number;
+        overageCapPKR: number;
+        exceedsOverageCap: boolean;
       };
     }
 

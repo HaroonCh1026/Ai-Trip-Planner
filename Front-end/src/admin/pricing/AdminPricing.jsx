@@ -2,16 +2,20 @@ import { useState, useEffect } from "react";
 import { C } from "../../styles/colors";
 import api from "../../api/client";
 
+// Vehicle catalog mirrors constants/vehicles.js labels exactly so the admin
+// sees the same names as users. Seeds are the backend rent-only per-km rates
+// (Backend/src/utils/vehicleOptions.ts costPerKmPKR) that the admin can override.
 const VEHICLE_SEEDS = [
-  { id: "sedan_private",   label: "Sedan (Private)",            seed: 25 },
-  { id: "sedan_shared",    label: "Sedan (Shared)",             seed: 8 },
-  { id: "suv_private",     label: "SUV (Private)",              seed: 45 },
-  { id: "hiace_private",   label: "Hiace (Private)",            seed: 60 },
-  { id: "hiace_shared",    label: "Hiace (Shared)",             seed: 12 },
-  { id: "coaster_private", label: "Coaster (Private)",          seed: 120 },
-  { id: "daewoo_business", label: "Daewoo Business Class",      seed: 4.5 },
-  { id: "daewoo_economy",  label: "Daewoo / Faisal Economy",    seed: 3 },
-  { id: "flight_economy",  label: "Flight (Economy fallback)",  seed: 22 },
+  { id: "hatchback_private", label: "Suzuki Alto (with driver)",          seed: 22  },
+  { id: "sedan_private",     label: "Toyota Corolla (with driver)",       seed: 28  },
+  { id: "sedan_shared",      label: "Shared Car (inDriver / Careem)",     seed: 8   },
+  { id: "suv_private",       label: "Toyota Fortuner (4x4)",              seed: 45  },
+  { id: "hiace_private",     label: "Toyota Hiace (with driver)",         seed: 60  },
+  { id: "hiace_shared",      label: "Shared Hiace Van",                   seed: 12  },
+  { id: "coaster_private",   label: "Toyota Coaster (group)",             seed: 90  },
+  { id: "daewoo_business",   label: "Daewoo Business Class",              seed: 4.5 },
+  { id: "daewoo_economy",    label: "Daewoo / Faisal Movers Economy",     seed: 3   },
+  { id: "flight_economy",    label: "Flight (PIA / SereneAir / Airblue)", seed: 22  },
 ];
 
 const FLIGHT_ROUTE_SEEDS = [
