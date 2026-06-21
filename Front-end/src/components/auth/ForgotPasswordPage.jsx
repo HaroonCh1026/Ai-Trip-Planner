@@ -72,7 +72,7 @@ export default function ForgotPasswordPage({ onBack }) {
         </button>
 
         <div style={{ width: "100%", maxWidth: 440 }}>
-          <div className="card" style={{ padding: "40px 36px", textAlign: "center" }}>
+          <div className="card vai-auth-card" style={{ padding: "40px 36px", textAlign: "center" }}>
             <div
               style={{
                 width: "64px",
@@ -147,7 +147,7 @@ export default function ForgotPasswordPage({ onBack }) {
       </button>
 
       <div style={{ width: "100%", maxWidth: 440 }}>
-        <div className="card" style={{ padding: "40px 36px" }}>
+        <div className="card vai-auth-card" style={{ padding: "40px 36px" }}>
           <h2
             style={{
               fontFamily: "'Playfair Display', serif",

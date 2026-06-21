@@ -136,6 +136,7 @@ export default function CostComparisonPanel({ trip }) {
 
       {/* Three-column comparison grid */}
       <div
+        className="vai-cost-compare-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",

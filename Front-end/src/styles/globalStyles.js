@@ -749,4 +749,71 @@ export const globalStyles = `
       font-size: 11px !important;
     }
   }
+
+/* ─── UI Round 8 — User-facing pages mobile (≤ 480 px) ──────────────────
+     Auth pages, Navbar drawer, Dashboard, ItineraryView, BookingConfirmation
+     All rules use vai-* classes that are added to JSX in the same session.  */
+
+  /* ─ Auth: reduce card inner padding so it breathes on a phone ─ */
+  .vai-auth-card { /* default: no-op — inline style applies */ }
+  @media (max-width: 480px) {
+    .vai-auth-card { padding: 28px 20px !important; }
+  }
+
+  /* ─ Auth: phone + city side-by-side → one column on phones ─ */
+  .vai-auth-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  @media (max-width: 480px) {
+    .vai-auth-2col { grid-template-columns: 1fr !important; }
+  }
+
+  /* ─ Cost comparison panel: 3 columns → 1 column on phones ─ */
+  @media (max-width: 480px) {
+    .vai-cost-compare-grid {
+      grid-template-columns: 1fr !important;
+    }
+  }
+
+  /* ─ BookingConfirmation: action row → stack vertically on phones ─ */
+  @media (max-width: 480px) {
+    .vai-booking-actions {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 10px !important;
+    }
+    .vai-booking-actions > button,
+    .vai-booking-actions > a {
+      width: 100% !important;
+      justify-content: center !important;
+      text-align: center !important;
+    }
+  }
+
+  /* ─ Navbar public drawer: ensure it is full-width on very narrow phones ─ */
+  @media (max-width: 480px) {
+    .vai-pubnav-drawer {
+      left: 0 !important;
+      right: 0 !important;
+      width: 100% !important;
+    }
+  }
+
+  /* ─ Itinerary day content: tighten left timeline indent on phones ─ */
+  @media (max-width: 480px) {
+    .vai-day-content-indent { padding-left: 20px !important; }
+  }
+
+  /* ─ Itinerary activity meta row: allow wrapping on phones ─ */
+  @media (max-width: 480px) {
+    .vai-activity-meta {
+      flex-wrap: wrap !important;
+      gap: 4px 8px !important;
+    }
+  }
+
+  /* ─ Dashboard explore / trips grid already uses auto-fill + minmax which
+     collapses naturally; no override needed. Stats grid handled in Round 1. ─ */
 `;

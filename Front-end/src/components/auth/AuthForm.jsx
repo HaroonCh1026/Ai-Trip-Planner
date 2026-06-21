@@ -29,7 +29,7 @@ export default function AuthForm({ mode, form, setForm, error, loading, onSubmit
               onChange={(e) =>
                 setForm((f) => ({ ...f, name: e.target.value }))
               }
-              placeholder="e.g. Ahmed Khan"
+              placeholder="e.g. Haroon Riaz"
             />
           </div>
         )}
@@ -54,13 +54,7 @@ export default function AuthForm({ mode, form, setForm, error, loading, onSubmit
           />
         </div>
         {mode === "signup" && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-            }}
-          >
+          <div className="vai-auth-2col" style={{ gap: 12 }}>
             <div>
               <label
                 style={{
@@ -119,7 +113,7 @@ export default function AuthForm({ mode, form, setForm, error, loading, onSubmit
             onChange={(e) =>
               setForm((f) => ({ ...f, password: e.target.value }))
             }
-            placeholder="Minimum 8 characters"
+            placeholder="8+ chars with letters & numbers"
             onKeyDown={(e) => e.key === "Enter" && onSubmit()}
           />
         </div>

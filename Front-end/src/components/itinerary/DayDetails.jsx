@@ -102,7 +102,7 @@ export default function DayDetails({ currentDay, activeDay }) {
       </div>
 
       {/* Timeline */}
-      <div style={{ position: "relative", paddingLeft: 36 }}>
+      <div className="vai-day-content-indent" style={{ position: "relative", paddingLeft: 36 }}>
         <div
           style={{
             position: "absolute",

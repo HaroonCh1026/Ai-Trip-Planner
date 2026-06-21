@@ -76,7 +76,7 @@ export default function AuthPage({ mode, onToggle, onSuccess, onBack }) {
           background: `radial-gradient(ellipse 70% 70% at 50% 50%, rgba(140,50,50,0.1) 0%, ${C.nearBlack} 70%)`,
         }}
       >
-        <div className="card" style={{ padding: "40px", textAlign: "center" }}>
+        <div className="card vai-auth-card" style={{ padding: "40px", textAlign: "center" }}>
           <div
             style={{
               width: "48px",
@@ -191,7 +191,7 @@ export default function AuthPage({ mode, onToggle, onSuccess, onBack }) {
 
       <div style={{ width: "100%", maxWidth: 440 }}>
         <AuthHeader />
-        <div className="card" style={{ padding: "40px 36px" }}>
+        <div className="card vai-auth-card" style={{ padding: "40px 36px" }}>
           <h2
             style={{
               fontFamily: "'Playfair Display', serif",

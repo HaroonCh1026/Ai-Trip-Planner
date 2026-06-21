@@ -214,7 +214,7 @@ export default function BookingConfirmation() {
         </div>
 
         {/* Action buttons */}
-        <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24 }}>
+        <div className="vai-booking-actions" style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 24 }}>
           <button
             onClick={() => navigate("/dashboard")}
             className="btn-primary"
